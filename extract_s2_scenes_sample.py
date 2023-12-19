@@ -141,7 +141,7 @@ def get_s2_mapper(
     mapper.metadata['sensor_azimuth_angle'] = \
         mapper.metadata['sensor_angles'].apply(
             lambda x: x['SENSOR_AZIMUTH_ANGLE'])
-    
+
     # load the Sentinel-2 scenes and resample them to 10 m, apply cloud masking
     scene_kwargs = {
         'scene_constructor': Sentinel2.from_safe,
@@ -270,7 +270,7 @@ def get_s2_spectra(
 
         # run PROSAIL forward runs for the different parametrizations available
         logger.info(f'{metadata.product_uri.iloc[0]} starting PROSAIL runs')
-        lut_params_pheno = lut_params_dir.join('prosail_danner-etal_all_phases.csv') # Only use general params for LUT
+        lut_params_pheno = lut_params_dir.joinpath('prosail_danner-etal_all_phases.csv') # Only use general params for LUT
     
         pheno_phases = \
             lut_params_pheno.name.split('etal')[-1].split('.')[0][1::]
@@ -374,7 +374,7 @@ if __name__ == '__main__':
             metadata_filters=metadata_filters
         )
 
-        output_dir_farm = out_dir.joinpath(f'{farm}_{year}')
+        output_dir_farm = out_dir.joinpath(f'{farm}')
         output_dir_farm.mkdir(exist_ok=True)
 
         try:
