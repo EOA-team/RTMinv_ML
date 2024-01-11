@@ -9,7 +9,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime
-#from rtm_inv.core.lookup_table import generate_lut
+from rtm_inv.core.lookup_table import generate_lut
+import pickle
 
 
 def get_logger():
@@ -44,7 +45,6 @@ def get_logger():
   return logger
 
 
-
 def generate_spectra(
   output_dir: Path,
   lut_params_dir: Path,
@@ -52,14 +52,15 @@ def generate_spectra(
   traits: List[str]
   ) -> None:
 
-  #logger = get_logger()
+  logger = get_logger()
   
   # run PROSAIL forward runs for the different parametrizations available
-  #logger.info('Starting PROSAIL runs')
-  lut_params_pheno = lut_params_dir.joinpath('prosail_danner-etal_all_phases.csv') # Only use general params for LUT
+  logger.info('Starting PROSAIL runs')
+  lut_params_pheno = lut_params_dir.joinpath('prosail_test.csv') #'prosail_danner-etal_all_phases.csv') # Only use general params for LUT
 
   pheno_phases = \
-      lut_params_pheno.name.split('etal')[-1].split('.')[0][1::]
+      lut_params_pheno.name.split('.csv')[0]
+      #lut_params_pheno.name.split('etal')[-1].split('.')[0][1::]
 
   # generate lookup-table
   trait_str = '-'.join(traits)
@@ -70,8 +71,6 @@ def generate_spectra(
   if not fpath_lut.exists():
     lut_inp = rtm_lut_config.copy()
     lut_inp['lut_params'] = lut_params_pheno
-    test = generate_lut(lut_params=lut_params_pheno)
-    print('done', test)
     lut = generate_lut(**lut_inp) # TO DO: need to modify function so that it simulates for a range of angles
 
     # special case CCC (Canopy Chlorophyll Content) ->
@@ -87,9 +86,9 @@ def generate_spectra(
     lut.dropna(inplace=True)
 
     # save LUT to file
-    # if not fpath_lut.exists():
-    with open(fpath_lut, 'wb+') as f:
-      pickle.dump(lut, f)
+    with open(fpath_lut, 'wb') as f:
+      pickle.dump(lut, f, protocol=3)
+
   else:
     pass
 
@@ -115,7 +114,8 @@ if __name__ == '__main__':
       '../data/auxiliary/S2-SRF_COPE-GSEG-EOPG-TN-15-0007_3.1.xlsx')
   # RTM configurations for lookup-table generation
   rtm_lut_config = {
-      'lut_size': 50000,
+      'sensor': 'Sentinel2A',
+      'lut_size': 500,
       'fpath_srf': fpath_srf,
       'remove_invalid_green_peaks': True,
       'sampling_method': 'FRS',
@@ -138,7 +138,5 @@ if __name__ == '__main__':
           traits=traits
       )
   except Exception as e:
-      #logger.error(f'Error: {e}')
+      print(f'Error: {e}')
       pass
-
-  #logger.info(f'Finished working')
