@@ -262,7 +262,6 @@ def _setup(
 
     return lut_params
 
-
 def generate_lut(
         sensor: str,
         lut_params: Path | pd.DataFrame,
@@ -277,6 +276,7 @@ def generate_lut(
         fpath_srf: Optional[Path] = None,
         remove_invalid_green_peaks: Optional[bool] = False,
         linearize_lai: Optional[bool] = False,
+        fixed_angles: Optional[bool] = False,
         **kwargs
 ) -> pd.DataFrame:
     """
@@ -330,6 +330,10 @@ def generate_lut(
         if True, transforms LAI values to a more linearized representation
         as suggested by Verhoef et al. (2018,
         https://doi.org/10.1016/j.rse.2017.08.006)
+    :param fixed_angles:
+        if True, then angles are the considered constant (e.g. when generating 
+        LUT for a single scene). If False, the range and distirbution of the
+        angles shuld be provided in te lut_params csv
     :param kwargs:
         optional keyword-arguments to pass to `LookupTable.generate_samples`
     :returns:
@@ -338,11 +342,12 @@ def generate_lut(
     # read parameters from CSV if not provided as a DataFrame
     if isinstance(lut_params, Path):
         lut_params = pd.read_csv(lut_params)
-
+    
     # prepare LUTs for RTMs
-    lut_params = _setup(
-        lut_params, rtm_name, solar_zenith_angle, viewing_zenith_angle,
-        solar_azimuth_angle, viewing_azimuth_angle, relative_azimuth_angle)
+    if fixed_angles:
+        lut_params = _setup(
+            lut_params, rtm_name, solar_zenith_angle, viewing_zenith_angle,
+            solar_azimuth_angle, viewing_azimuth_angle, relative_azimuth_angle)
     # get input parameter samples first
     lut = LookupTable(params=lut_params)
     lut.generate_samples(
