@@ -31,7 +31,7 @@ from eodal.utils.sentinel2 import get_S2_platform_from_safe, _url_to_safe_name
 from pathlib import Path
 from rtm_inv.core.lookup_table import generate_lut
 from typing import Any, Dict, List, Optional
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
 
 from utils import get_farms
 
@@ -174,38 +174,37 @@ if __name__ == '__main__':
     
     """
 
+    # Create polygon shp out of bounds of Switerland
     data_dir = Path('../data/coords.csv')
     year = 2019
 
     # loop over coordinates, get angles and add save in a single dataframe/file
-    coords = pd.read_csv(data_dir, delimiter=';')
+    #coords = pd.read_csv(data_dir, delimiter=';')
+    df = pd.read_csv(data_dir, delimiter=';')
+    polygon = Polygon(zip(df['lon'], df['lat']))
+    gdf = gpd.GeoDataFrame(geometry=[polygon], crs='EPSG:4326')
 
     angles_df = pd.DataFrame()
-    for i, coord in coords.iterrows():
-        point = Point(coord['lon'], coord['lat'])
-        gds = gpd.GeoSeries([point], crs='EPSG:4326') #'EPSG:32632'
-        #gds.set_crs(epsg=32632)
-        gds.name = 'geometry'
 
-        feature = Feature.from_geoseries(gds=gds) 
-        s2_mapper_config = MapperConfigs(
-            collection='sentinel2-msi',
-            time_start=datetime(year, 1, 1),
-            time_end=datetime(year, 12, 31),
-            feature=feature,
-            metadata_filters=metadata_filters
+    feature = Feature.from_geoseries(gds=gdf.geometry) 
+    s2_mapper_config = MapperConfigs(
+        collection='sentinel2-msi',
+        time_start=datetime(year, 1, 1),
+        time_end=datetime(year, 12, 31),
+        feature=feature,
+        metadata_filters=metadata_filters
+    )
+
+    try:
+        mapper = get_s2_mapper(
+            s2_mapper_config=s2_mapper_config,
+            output_dir=out_dir
         )
-
-        try:
-            mapper = get_s2_mapper(
-                s2_mapper_config=s2_mapper_config,
-                output_dir=out_dir
-            )
-            angles_df = pd.concat([angles_df, mapper.metadata[['sun_azimuth_angle', 'sun_zenith_angle', 'sensor_azimuth_angle', 'sensor_zenith_angle']]])
-            
-        except Exception as e:
-            logger.error(f'Failed {farm}: {e}')
-            pass
+        angles_df = pd.concat([angles_df, mapper.metadata[['sun_azimuth_angle', 'sun_zenith_angle', 'sensor_azimuth_angle', 'sensor_zenith_angle']]])
+        
+    except Exception as e:
+        logger.error(f'Failed {farm}: {e}')
+        pass
 
     with open(out_dir.joinpath('s2_angles_switzerland.pkl'), 'wb') as f:
         pickle.dump(angles_df, f)
