@@ -115,11 +115,8 @@ def get_s2_mapper(
     # In this case we can simply read the data from file and create
     # a new mapper instance
     fpath_metadata = output_dir.joinpath('eodal_mapper_metadata.gpkg')
-    fpath_mapper = output_dir.joinpath('eodal_mapper_scenes.pkl')
-    if fpath_mapper.exists() and fpath_metadata.exists():
+    if fpath_metadata.exists():
         metadata = gpd.read_file(fpath_metadata)
-        scenes = SceneCollection.from_pickle(stream=fpath_mapper)
-        mapper.data = scenes
         mapper.metadata = metadata
         return mapper
     # otherwise, it's necessary to query the data again
@@ -142,6 +139,8 @@ def get_s2_mapper(
     mapper.metadata['sensor_azimuth_angle'] = \
         mapper.metadata['sensor_angles'].apply(
             lambda x: x['SENSOR_AZIMUTH_ANGLE'])
+
+    fpath_metadata = output_dir.joinpath('eodal_mapper_metadata.gpkg')
 
     return mapper
 
@@ -200,11 +199,11 @@ if __name__ == '__main__':
             s2_mapper_config=s2_mapper_config,
             output_dir=out_dir
         )
-        angles_df = pd.concat([angles_df, mapper.metadata[['sun_azimuth_angle', 'sun_zenith_angle', 'sensor_azimuth_angle', 'sensor_zenith_angle']]])
+        angles_df = pd.concat([angles_df, mapper.metadata[['sun_azimuth_angle', 'sun_zenith_angle', 'sensor_azimuth_angle', 'sensor_zenith_angle', 'spacecraft_name']]])
         
     except Exception as e:
         logger.error(f'Failed {farm}: {e}')
         pass
 
-    with open(out_dir.joinpath('s2_angles_switzerland.pkl'), 'wb') as f:
+    with open(out_dir.joinpath('s2_angles_switzerland_2021.pkl'), 'wb') as f:
         pickle.dump(angles_df, f)
