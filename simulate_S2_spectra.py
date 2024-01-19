@@ -56,7 +56,7 @@ def generate_spectra(
   
   # run PROSAIL forward runs for the different parametrizations available
   logger.info('Starting PROSAIL runs')
-  lut_params_pheno = lut_params_dir.joinpath('prosail_test.csv') #'prosail_danner-etal_all_phases.csv') # Only use general params for LUT
+  lut_params_pheno = lut_params_dir.joinpath('prosail_danner-etal_switzerland.csv') #'prosail_danner-etal_all_phases.csv') # Only use general params for LUT
 
   pheno_phases = \
       lut_params_pheno.name.split('.csv')[0]
@@ -115,7 +115,7 @@ if __name__ == '__main__':
   # RTM configurations for lookup-table generation
   rtm_lut_config = {
       'sensor': 'Sentinel2A',
-      'lut_size': 500,
+      'lut_size': 50000,
       'fpath_srf': fpath_srf,
       'remove_invalid_green_peaks': True,
       'sampling_method': 'FRS',
