@@ -7,52 +7,92 @@ Train a model to perform a RTM inversion
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from datetime import datetime
+from argparse import ArgumentParser
+import yaml
+from typing import Dict, Tuple, Union, Any
+
 from models import MODELS
 
-#############################################
-# DEFINE TRAINING PARAMS
+def load_config(config_path: str) -> Dict:
+  ''' 
+  Load configuration file
 
-data_path = '../results/lut_based_inversion/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints.pkl'
-train_cols = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08',
- 'B8A', 'B09', 'B10', 'B11', 'B12']
-target_col = 'lai'
-test_size = 0.2
-k_folds = 4
-model_name = 'RF' # see possible models in models.__init__.py
-model_filename = model_name +  datetime.now().strftime("%Y%m%d_%H%M%S") + '.pkl' # path to save trained model
-
-# TO DO: model hyperparameters as input -> could be a grid of hyperparams 
+  :param config_path: path to yaml file
+  :returns: dictionary of parameters
+  '''
+  with open(config_path, "r") as config_file:
+      config = yaml.safe_load(config_file)
+  return config
 
 
-#############################################
-# SET UP DATA AND MODEL
+def prepare_data(config: dict) -> Union[Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series], None]:
+  ''' 
+  Load data and prepare training and testing sets
 
-df = pd.read_pickle(data_path)
-X = df[train_cols]
-y = df[target_col]
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+  :param config: dictionary of configuration parameters
+  :returns: X pd.DataFrame and y pd.Series for training and test sets 
+  '''
+  df = pd.read_pickle(config['Data']['data_path'])
+  X = df[config['Data']['train_cols']]
+  y = df[config['Data']['target_col']]
+  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=config['Training']['test_size'], random_state=config['Seed'])
+  # Could add a batched dataloader / need to adapt data depending on model
 
-# Initialize model based on the specified type
-if model_name not in MODELS:
-  raise ValueError(f"Invalid model type: {model_type}")
-else:
-  model = MODELS[model_name]()
+  return X_train, X_test, y_train, y_test
 
-  # Fit model, with k-fold cross validation if defined
-  model.fit(X=X_train, y=y_train, k_folds=k_folds)
 
-  # To do: hyperparam tuning -> or have a different script for tuning that calls the train , like earthnet minicuber
+def build_model(config: dict) -> Any:
+  ''' 
+  Instantiated model
 
-  # Test model
+  :param config: dictionary of configuration parameters
+  :returns: model
+  '''
+  model_name = config['Model']['name']
+  if model_name not in MODELS:
+    raise ValueError(f"Invalid model type: {model_name}")
+  else:
+    # Model hypereparameters can be set in the config, else default values used
+    model_params = {key: value for key, value in config['Model'].items() if key != 'name'}  # Pass only hyperparams
+    model = MODELS[model_name](**model_params)
+  
+  return model
+
+
+def train_model(config: dict) -> None:
+  ''' 
+  Train model on training set, get scores on test set, save model
+
+  :param config: dictionary of configuration parameters
+  '''
+  #############################################
+  # DATA
+  X_train, X_test, y_train, y_test = prepare_data(config=config)
+
+  #############################################
+  # MODEL
+  model = build_model(config=config)
+  model_name = config['Model']['name']
+  model_filename = model_name +  datetime.now().strftime("%Y%m%d_%H%M%S") + '.pkl' # path to save trained model
+
+  #############################################
+  # TRAIN
+  model.fit(X=X_train, y=y_train, k_folds=config['Training']['k_folds'])
+  
+  #############################################
+  # TEST AND SAVE 
   y_pred = model.predict(X_test=X_test)
-
-  # Compute scores and metrics
   model.test_scores(y_test=y_test, y_pred=y_pred)
+  #model.save(model=model, model_filename=model_filename)
 
-  # Save model for future use
-  model.save(model=model, model_filename=model_filename)
-
+  return
 
 
     
+if __name__ == "__main__":
+  parser = ArgumentParser()
+  parser.add_argument('setting', type = str, metavar='path/to/setting.yaml', help='yaml with all settings')
+  args = parser.parse_args()
 
+  config = load_config(args.setting)
+  train_model(config)

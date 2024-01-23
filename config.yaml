@@ -1,0 +1,20 @@
+Model: 
+    name : "RF"
+    n_estimators: 50
+    max_depth: 100
+    min_samples_split: 3 
+    min_samples_leaf: 1
+    random_state: 42
+
+Seed: 42
+
+Data:
+    data_path : '../results/lut_based_inversion/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints.pkl'
+    train_cols : ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
+    target_col : 'lai'    
+    
+Training:
+    test_size : 0.2
+    k_folds : 4
+
+

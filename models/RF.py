@@ -1,9 +1,16 @@
+'''
+Random Forest Regressor model to perform a RTM inversion
+
+@author Selene Ledain
+'''
+
 from sklearn.model_selection import cross_val_score, KFold
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 import pandas as pd
 from typing import Any, Dict, List, Optional
 import pickle
+import numpy as np
 
 class RF(RandomForestRegressor):
     def __init__(self, n_estimators=100, max_depth=None, min_samples_split=2, min_samples_leaf=1, random_state=None):
@@ -27,7 +34,7 @@ class RF(RandomForestRegressor):
     def fit(self, 
         X: pd.DataFrame,
         y: pd.Series, 
-        k_folds: Optional[int] = 5):
+        k_folds: Optional[int] = 5) -> None:
         '''
         Fit the model on the training set, using k-fold cros validation if possible
 
@@ -65,7 +72,7 @@ class RF(RandomForestRegressor):
         print(f'Mean CV RMSE: {sum(cv_rmse_scores)/len(cv_rmse_scores)}')
 
 
-    def predict(self, X_test: pd.DataFrame):
+    def predict(self, X_test: pd.DataFrame) -> np.array:
         '''
         Make predictions on test set
 
@@ -78,7 +85,7 @@ class RF(RandomForestRegressor):
         # TODO: Implement hyperparameter tuning using GridSearchCV or another method
         pass
 
-    def test_scores(self, y_test: pd.Series, y_pred: pd.Series):
+    def test_scores(self, y_test: pd.Series, y_pred: pd.Series) -> None:
         '''
         Compute scores on test set
 
@@ -89,7 +96,7 @@ class RF(RandomForestRegressor):
         test_rmse = mean_squared_error(y_test, y_pred, squared=False)
         print(f'Test RMSE: {test_rmse}')
 
-    def save(self, model, model_filename: str):
+    def save(self, model, model_filename: str) -> None:
         ''' 
         Save trained model
 
