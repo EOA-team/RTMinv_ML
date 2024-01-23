@@ -13,7 +13,7 @@ import pickle
 import numpy as np
 
 class RF(RandomForestRegressor):
-    def __init__(self, n_estimators=100, max_depth=None, min_samples_split=2, min_samples_leaf=1, random_state=None):
+    def __init__(self, n_estimators=100, max_depth=None, min_samples_split=2, min_samples_leaf=1, random_state=None, k_folds: Optional[int] = 5):
         '''
         Random Forest regressor model
 
@@ -22,6 +22,7 @@ class RF(RandomForestRegressor):
         :param min_samples_split: minimum number of samples required to split an internal node
         :param min_samples_leaf: minimum number of samples required to be at a leaf node
         :param random_state: 
+        :param k_folds: number of folds for cross validation
         '''
         super().__init__(
             n_estimators=n_estimators,
@@ -30,24 +31,23 @@ class RF(RandomForestRegressor):
             min_samples_leaf=min_samples_leaf,
             random_state=random_state
         )
+        self.k_folds = k_folds
 
     def fit(self, 
         X: pd.DataFrame,
-        y: pd.Series, 
-        k_folds: Optional[int] = 5) -> None:
+        y: pd.Series) -> None:
         '''
         Fit the model on the training set, using k-fold cros validation if possible
 
         :param X: training data
         :param y: training labels
-        :param k_folds: number of folds for cross validation
         '''
-        if k_folds == 0:
+        if self.k_folds == 0:
             # If k_folds is 0, perform a standard training without k-fold cross-validation
             super().fit(X, y)
         else:
             # Perform k-fold cross-validation on the training data
-            kf = KFold(n_splits=k_folds, shuffle=True, random_state=self.random_state)
+            kf = KFold(n_splits=self.k_folds, shuffle=True, random_state=self.random_state)
 
             # List to store cross-validation RMSE scores
             cv_rmse_scores = []
@@ -85,7 +85,7 @@ class RF(RandomForestRegressor):
         # TODO: Implement hyperparameter tuning using GridSearchCV or another method
         pass
 
-    def test_scores(self, y_test: pd.Series, y_pred: pd.Series) -> None:
+    def test_scores(self, y_test: pd.Series, y_pred: np.array) -> None:
         '''
         Compute scores on test set
 

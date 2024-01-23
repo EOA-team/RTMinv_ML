@@ -35,8 +35,9 @@ def prepare_data(config: dict) -> Union[Tuple[pd.DataFrame, pd.DataFrame, pd.Ser
   df = pd.read_pickle(config['Data']['data_path'])
   X = df[config['Data']['train_cols']]
   y = df[config['Data']['target_col']]
-  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=config['Training']['test_size'], random_state=config['Seed'])
+  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=config['Data']['test_size'], random_state=config['Seed'])
   # Could add a batched dataloader / need to adapt data depending on model
+  # Could normalise/scale data
 
   return X_train, X_test, y_train, y_test
 
@@ -77,7 +78,7 @@ def train_model(config: dict) -> None:
 
   #############################################
   # TRAIN
-  model.fit(X=X_train, y=y_train, k_folds=config['Training']['k_folds'])
+  model.fit(X=X_train, y=y_train)
   
   #############################################
   # TEST AND SAVE 
