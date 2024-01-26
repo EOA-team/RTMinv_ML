@@ -1,11 +1,10 @@
 Model: 
-    name : "RF"
-    n_estimators: 50
-    max_depth: 100
-    min_samples_split: 3 
-    min_samples_leaf: 1
-    random_state: 42
-    k_folds : 4
+    name : "GPR"
+    n_iter: 2
+    n_initial: 50
+    max_samples: 100
+    max_queries: 100
+    strategy: 'cbd'
     save: False
 
 Seed: 42

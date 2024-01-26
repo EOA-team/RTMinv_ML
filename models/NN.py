@@ -30,7 +30,8 @@ class SimpleNeuralNetwork(nn.Module):
     return x
 
 class NeuralNetworkRegressor:
-  def __init__(self, input_size, hidden_size, output_size, learning_rate=0.01, epochs=100, batch_size=32, random_state=42):
+  def __init__(self, input_size, hidden_size, output_size, epochs=100, batch_size=32, 
+  optim={'name': 'Adam', 'learning_rate': 0.01}, random_state=42):
       '''
       Neural Network regressor model
 
@@ -40,17 +41,36 @@ class NeuralNetworkRegressor:
       :param learning_rate: learning rate for optimization
       :param epochs: number of training epochs
       :param batch_size: batch size for training
+      :param optim_kwargs: optimizer name (see torch.optim) and parameters to set it up
       :param random_state: 
       '''
       self.model = SimpleNeuralNetwork(input_size, hidden_size, output_size)
-      self.learning_rate = learning_rate
       self.epochs = epochs
       self.batch_size = batch_size
       self.random_state = random_state
 
       # Define loss function and optimizer
       self.criterion = nn.MSELoss()
-      self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+      self.optim_kwargs = optim
+      self.optimizer = self.get_optim(self.optim_kwargs)
+
+
+  def get_optim(self, optim_kwargs: dict) -> optim:
+      ''' 
+      Initialise optimizer for the model training
+
+      :param optim_kwargs: dictionary with optimizer name and parameters to instantiate it
+      See torch.nn.optim documentation for options and details
+      :returns: Instatiated optimizer
+      '''
+
+      if optim_kwargs['name'] == 'Adam':
+        return optim.Adam(self.model.parameters(), **{k: v for k, v in optim_kwargs.items() if k != 'name'})
+      if optim_kwargs['name'] == 'SGD':
+        return optim.SGD(self.model.parameters(), **{k: v for k, v in optim_kwargs.items() if k != 'name'})
+      else:
+        raise Exception(f'Optimizer {optim_kwargs["name"]} not implemented, please select another')
+
 
   def fit(self, X: pd.DataFrame, y: pd.Series):
       '''
@@ -113,3 +133,15 @@ class NeuralNetworkRegressor:
       # Compute RMSE on the test set
       test_rmse = mean_squared_error(y_test, y_pred, squared=False)
       print(f'Test RMSE: {test_rmse}')
+
+  def save(self, model, model_filename: str) -> None:
+      ''' 
+      Save trained model
+
+      :param model: trained model
+      :param model_filename: path to save model as .pkl file
+      '''
+      # Save the trained model to a file using pickle
+      with open(model_filename, 'wb') as file:
+          pickle.dump(model, file)
+      print(f'Trained model saved to {model_filename}')

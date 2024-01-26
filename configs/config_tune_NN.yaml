@@ -1,12 +1,16 @@
 Model: 
-    name : "RF"
-    n_estimators: 50
-    max_depth: 100
-    min_samples_split: 3 
-    min_samples_leaf: 1
-    random_state: 42
-    k_folds : 4
+    name : "NN"
+    input_size: 13  
+    output_size: 1
+    epochs: 10
+    optim: 
+        name: Adam
     save: False
+
+Grid:
+    hidden_size: [10, 20, 50]
+    lr: [0.01, 0.02]
+    batch_size: [32, 64]
 
 Seed: 42
 
@@ -15,5 +19,3 @@ Data:
     train_cols : ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
     target_col : 'lai'   
     test_size : 0.2 
-
-

@@ -5,6 +5,10 @@ Model:
     output_size: 1
     epochs: 10
     batch_size: 64
+    optim: 
+        name: Adam
+        lr: 0.01
+    save: False
 
 Seed: 42
 

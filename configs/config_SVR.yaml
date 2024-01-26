@@ -1,11 +1,8 @@
 Model: 
-    name : "RF"
-    n_estimators: 50
-    max_depth: 100
-    min_samples_split: 3 
-    min_samples_leaf: 1
-    random_state: 42
-    k_folds : 4
+    name : "SVR"
+    C: 3
+    epsilon: 0.1
+    k_folds: 4
     save: False
 
 Seed: 42

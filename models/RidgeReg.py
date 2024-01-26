@@ -1,49 +1,51 @@
 '''
-Random Forest Regressor model to perform a RTM inversion
+Ridge Regression model to perform a RTM inversion
 
 @author Selene Ledain
 '''
 
 from sklearn.model_selection import cross_val_score, KFold
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error
 import pandas as pd
-from typing import Any, Dict, List, Optional
+from typing import Optional
 import pickle
 import numpy as np
 
-class RF(RandomForestRegressor):
-    def __init__(self, n_estimators=100, max_depth=None, min_samples_split=2, min_samples_leaf=1, random_state=None, k_folds: Optional[int] = 5):
+class RidgeReg(Ridge):
+    def __init__(self, alpha=1.0, fit_intercept=True, copy_X=True, max_iter=None, tol=0.001, solver='auto', random_state=None, k_folds: Optional[int] = 5):
         '''
-        Random Forest regressor model
+        Ridge Regression model
 
-        :param n_estimators: number of trees in the forest
-        :param max_depth: maximum depth of the tree
-        :param min_samples_split: minimum number of samples required to split an internal node
-        :param min_samples_leaf: minimum number of samples required to be at a leaf node
+        :param alpha: Regularization strength (must be a positive float).
+        :param fit_intercept: Whether to calculate the intercept for this model.
+        :param copy_X: Whether to copy X in fit method.
+        :param max_iter: Maximum number of iterations for optimization algorithms to converge.
+        :param tol: Precision of the solution.
+        :param solver: Solver to use for optimization ('auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga').
         :param random_state: 
-        :param k_folds: number of folds for cross validation
+        :param k_folds: Number of folds for cross-validation
         '''
         super().__init__(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            min_samples_split=min_samples_split,
-            min_samples_leaf=min_samples_leaf,
+            alpha=alpha,
+            fit_intercept=fit_intercept,
+            copy_X=copy_X,
+            max_iter=max_iter,
+            tol=tol,
+            solver=solver,
             random_state=random_state
         )
         self.k_folds = k_folds
 
-    def fit(self, 
-        X: pd.DataFrame,
-        y: pd.Series) -> None:
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
         '''
-        Fit the model on the training set, using k-fold cros validation if possible
+        Fit the model on the training set, using k-fold cross-validation if possible
 
-        :param X: training data
-        :param y: training labels
+        :param X: Training data
+        :param y: Training labels
         '''
         if self.k_folds == 0:
-            # If k_folds is 0, perform a standard training without k-fold cross-validation
+            # If k_folds is 0, perform standard training without k-fold cross-validation
             super().fit(X, y)
         else:
             # Perform k-fold cross-validation on the training data
@@ -67,27 +69,26 @@ class RF(RandomForestRegressor):
                 fold_rmse = mean_squared_error(y_val_fold, y_val_pred)**0.5
                 cv_rmse_scores.append(fold_rmse)
 
-        # Print cross-validation results
-        print(f'Cross-Validation RMSE for each fold: {cv_rmse_scores}')
-        print(f'Mean CV RMSE: {sum(cv_rmse_scores)/len(cv_rmse_scores)}')
-
+            # Print cross-validation results
+            print(f'Cross-Validation RMSE for each fold: {cv_rmse_scores}')
+            print(f'Mean CV RMSE: {sum(cv_rmse_scores)/len(cv_rmse_scores)}')
 
     def predict(self, X_test: pd.DataFrame) -> np.array:
         '''
-        Make predictions on test set
+        Make predictions on the test set
 
-        :param X_test: training data
+        :param X_test: Test data
         '''
         # Make predictions on the testing set
         return super().predict(X_test)
-        
+
 
     def test_scores(self, y_test: pd.Series, y_pred: np.array) -> None:
         '''
-        Compute scores on test set
+        Compute scores on the test set
 
-        :param y_test: test labels
-        :param y_pred: test predictions
+        :param y_test: Test labels
+        :param y_pred: Test predictions
         '''
         # Compute RMSE on the test set
         test_rmse = mean_squared_error(y_test, y_pred, squared=False)

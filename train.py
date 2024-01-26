@@ -36,7 +36,6 @@ def prepare_data(config: dict) -> Union[Tuple[pd.DataFrame, pd.DataFrame, pd.Ser
   X = df[config['Data']['train_cols']]
   y = df[config['Data']['target_col']]
   X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=config['Data']['test_size'], random_state=config['Seed'])
-  # Could add a batched dataloader / need to adapt data depending on model
   # Could normalise/scale data
 
   return X_train, X_test, y_train, y_test
@@ -60,6 +59,22 @@ def build_model(config: dict) -> Any:
   return model
 
 
+def train_model_al(X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.Series, y_test: pd.Series):
+  ''' 
+  Train model with active learning
+  Repeat training multiple times on smaller subsets of training data using active learning
+  Test RMSE is the avg RMSE of all the model runs
+
+  :param X_train: training data
+  :param y_train: training labels
+  :param X_test: testing data
+  :param y_test: testing labels
+  '''
+  # Call GPR fit passing test data too
+  return
+
+
+
 def train_model(config: dict) -> None:
   ''' 
   Train model on training set, get scores on test set, save model
@@ -72,19 +87,26 @@ def train_model(config: dict) -> None:
 
   #############################################
   # MODEL
+  save_model = config['Model'].pop('save')
   model = build_model(config=config)
   model_name = config['Model']['name']
-  model_filename = model_name +  datetime.now().strftime("%Y%m%d_%H%M%S") + '.pkl' # path to save trained model
-
-  #############################################
-  # TRAIN
-  model.fit(X=X_train, y=y_train)
+  model_filename = model_name +  datetime.now().strftime("%Y%m%d_%H%M%S") + '.pkl' # path to save trained model 
   
   #############################################
-  # TEST AND SAVE 
-  y_pred = model.predict(X_test=X_test)
-  model.test_scores(y_test=y_test, y_pred=y_pred)
-  #model.save(model=model, model_filename=model_filename)
+  # TRAIN
+  if model_name == 'GPR': # Active learning
+    model.fit(X_train=X_train,y_train=y_train, X_test=X_test, y_test=y_test)
+  else:
+    model.fit(X=X_train, y=y_train)
+    #############################################
+    # TEST 
+    y_pred = model.predict(X_test=X_test)
+    model.test_scores(y_test=y_test, y_pred=y_pred)
+
+  #############################################
+  # SAVE 
+  if save_model:
+    model.save(model=model, model_filename=model_filename)
 
   return
 
