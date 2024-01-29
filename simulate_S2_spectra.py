@@ -56,10 +56,10 @@ def generate_spectra(
   
   # run PROSAIL forward runs for the different parametrizations available
   logger.info('Starting PROSAIL runs')
-  lut_params_pheno = lut_params_dir.joinpath('prosail_danner-etal_switzerland.csv') #'prosail_danner-etal_all_phases.csv') # Only use general params for LUT
+  lut_params_pheno = lut_params_dir.joinpath('prosail_danner-etal_switzerland.csv') # Only use general params for LUT
 
   pheno_phases = \
-      lut_params_pheno.name.split('.csv')[0]
+      lut_params_pheno.name.split('.csv')[0] +'_S2B'
       #lut_params_pheno.name.split('etal')[-1].split('.')[0][1::]
 
   # generate lookup-table
@@ -114,12 +114,14 @@ if __name__ == '__main__':
       '../data/auxiliary/S2-SRF_COPE-GSEG-EOPG-TN-15-0007_3.1.xlsx')
   # RTM configurations for lookup-table generation
   rtm_lut_config = {
-      'sensor': 'Sentinel2A',
+      'sensor': 'Sentinel2B',
       'lut_size': 50000,
       'fpath_srf': fpath_srf,
       'remove_invalid_green_peaks': True,
       'sampling_method': 'FRS',
-      'linearize_lai': False
+      'linearize_lai': False,
+      'apply_glai_ccc_constraint': False,
+      'apply_chlorophyll_carotiniod_constraint': False
   }
   # directory with LUT parameters for different phenological macro-stages
   lut_params_dir = Path('lut_params')

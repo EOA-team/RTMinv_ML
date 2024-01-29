@@ -11,6 +11,7 @@ import pandas as pd
 from typing import Any, Dict, List, Optional
 import pickle
 import numpy as np
+from tqdm import tqdm
 
 class RF(RandomForestRegressor):
     def __init__(self, n_estimators=100, max_depth=None, min_samples_split=2, min_samples_leaf=1, random_state=None, k_folds: Optional[int] = 5):
@@ -53,9 +54,9 @@ class RF(RandomForestRegressor):
             cv_rmse_scores = []
 
             # Loop through each fold
-            for train_idx, val_idx in kf.split(X):
-                X_train_fold, X_val_fold = X.iloc[train_idx], X.iloc[val_idx]
-                y_train_fold, y_val_fold = y.iloc[train_idx], y.iloc[val_idx]
+            for train_idx, val_idx in tqdm(kf.split(X), desc ="Training CV fold"):
+                X_train_fold, X_val_fold = X[train_idx], X[val_idx]
+                y_train_fold, y_val_fold = y[train_idx], y[val_idx]
 
                 # Fit the model on the training fold
                 super().fit(X_train_fold, y_train_fold)

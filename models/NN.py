@@ -12,6 +12,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 import pandas as pd
 import numpy as np
+import pickle
 
 
 class SimpleNeuralNetwork(nn.Module):
@@ -72,7 +73,7 @@ class NeuralNetworkRegressor:
         raise Exception(f'Optimizer {optim_kwargs["name"]} not implemented, please select another')
 
 
-  def fit(self, X: pd.DataFrame, y: pd.Series):
+  def fit(self, X: np.array, y:np.array):
       '''
       Fit the model on the training set
 
@@ -82,8 +83,8 @@ class NeuralNetworkRegressor:
       torch.manual_seed(self.random_state)
 
       # Convert NumPy arrays to PyTorch tensors
-      X_train_tensor = torch.FloatTensor(X.values)
-      y_train_tensor = torch.FloatTensor(y.values).view(-1, 1)
+      X_train_tensor = torch.FloatTensor(X)
+      y_train_tensor = torch.FloatTensor(y).view(-1, 1)
 
       # Create a DataLoader for batch training
       train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
@@ -104,9 +105,9 @@ class NeuralNetworkRegressor:
               self.optimizer.step()
 
           if (epoch + 1) % 10 == 0:
-              print(f'Epoch [{epoch+1}/{self.epochs}], Loss: {loss.item():.4f}')
+              print(f'Epoch [{epoch+1}/{self.epochs}], Loss (MSE): {loss.item():.4f}')
 
-  def predict(self, X_test: pd.DataFrame):
+  def predict(self, X_test: np.array):
       '''
       Make predictions on test set
 
@@ -116,7 +117,7 @@ class NeuralNetworkRegressor:
       self.model.eval()
 
       # Convert NumPy array to PyTorch tensor
-      X_test_tensor = torch.FloatTensor(X_test.values)
+      X_test_tensor = torch.FloatTensor(X_test)
 
       # Make predictions on the testing set
       predictions = self.model(X_test_tensor).detach().numpy()
