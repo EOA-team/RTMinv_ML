@@ -5,7 +5,9 @@ Train a model to perform a RTM inversion
 '''
 
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
 from datetime import datetime
 from argparse import ArgumentParser
 import yaml
@@ -25,20 +27,46 @@ def load_config(config_path: str) -> Dict:
   return config
 
 
-def prepare_data(config: dict) -> Union[Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series], None]:
+def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.array], None]:
   ''' 
   Load data and prepare training and testing sets
 
   :param config: dictionary of configuration parameters
   :returns: X pd.DataFrame and y pd.Series for training and test sets 
   '''
-  df = pd.read_pickle(config['Data']['data_path'])
-  X = df[config['Data']['train_cols']]
-  y = df[config['Data']['target_col']]
-  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=config['Data']['test_size'], random_state=config['Seed'])
-  # Could normalise/scale data
+  data_path = config['Data']['data_path']
 
-  return X_train, X_test, y_train, y_test
+  if isinstance(data_path, str):
+    df = pd.read_pickle(data_path)
+    X = df[config['Data']['train_cols']]
+    y = df[config['Data']['target_col']]
+    X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
+    if config['Data']['normalize']:
+      scaler = MinMaxScaler()
+      X_train = scaler.fit_transform(X_train) # becomes an array
+      X_test = scaler.transform(X_test)
+      return X_train, X_test, y_train, y_test
+    else:
+      return X_train.values, X_test.values, y_train, y_test
+
+  elif isinstance(data_path, list):
+    # Assuming all files in the list are pickled DataFrames
+    dfs = [pd.read_pickle(path) for path in data_path]
+    concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
+
+    X = concatenated_df[config['Data']['train_cols']]
+    y = concatenated_df[config['Data']['target_col']]
+    X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
+    if config['Data']['normalize']:
+      scaler = MinMaxScaler()
+      X_train = scaler.fit_transform(X_train) # becomes an array
+      X_test = scaler.transform(X_test)
+      return X_train, X_test, y_train, y_test
+    else:
+      return X_train.values, X_test.values, y_train, y_test
+
+  else:
+      return None
 
 
 def build_model(config: dict) -> Any:
@@ -59,21 +87,6 @@ def build_model(config: dict) -> Any:
   return model
 
 
-def train_model_al(X_train: pd.DataFrame, X_test: pd.DataFrame, y_train: pd.Series, y_test: pd.Series):
-  ''' 
-  Train model with active learning
-  Repeat training multiple times on smaller subsets of training data using active learning
-  Test RMSE is the avg RMSE of all the model runs
-
-  :param X_train: training data
-  :param y_train: training labels
-  :param X_test: testing data
-  :param y_test: testing labels
-  '''
-  # Call GPR fit passing test data too
-  return
-
-
 
 def train_model(config: dict) -> None:
   ''' 
@@ -84,14 +97,15 @@ def train_model(config: dict) -> None:
   #############################################
   # DATA
   X_train, X_test, y_train, y_test = prepare_data(config=config)
+  
 
   #############################################
   # MODEL
   save_model = config['Model'].pop('save')
-  model = build_model(config=config)
   model_name = config['Model']['name']
-  model_filename = model_name +  datetime.now().strftime("%Y%m%d_%H%M%S") + '.pkl' # path to save trained model 
-  
+  model_filename = config['Model'].pop('save_path') if 'save_path' in config['Model'].keys() else model_name + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.pkl' # path to save trained model 
+  model = build_model(config=config)
+   
   #############################################
   # TRAIN
   if model_name == 'GPR': # Active learning

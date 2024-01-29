@@ -11,6 +11,7 @@ import pandas as pd
 from typing import Optional
 import pickle
 import numpy as np
+from tqdm import tqdm
 
 class LassoReg(Lasso):
     def __init__(self, alpha=1.0, fit_intercept=True, precompute=False, copy_X=True, max_iter=1000, tol=0.0001, warm_start=False, positive=False, random_state=None, selection='cyclic', k_folds: Optional[int] = 5):
@@ -43,7 +44,7 @@ class LassoReg(Lasso):
         )
         self.k_folds = k_folds
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
+    def fit(self, X: np.array, y: np.array) -> None:
         '''
         Fit the model on the training set, using k-fold cross-validation if possible
 
@@ -61,9 +62,9 @@ class LassoReg(Lasso):
             cv_rmse_scores = []
 
             # Loop through each fold
-            for train_idx, val_idx in kf.split(X):
-                X_train_fold, X_val_fold = X.iloc[train_idx], X.iloc[val_idx]
-                y_train_fold, y_val_fold = y.iloc[train_idx], y.iloc[val_idx]
+            for train_idx, val_idx in tqdm(kf.split(X), desc='Training CV fold'):
+                X_train_fold, X_val_fold = X[train_idx], X[val_idx]
+                y_train_fold, y_val_fold = y[train_idx], y[val_idx]
 
                 # Fit the model on the training fold
                 super().fit(X_train_fold, y_train_fold)
@@ -79,7 +80,7 @@ class LassoReg(Lasso):
             print(f'Cross-Validation RMSE for each fold: {cv_rmse_scores}')
             print(f'Mean CV RMSE: {sum(cv_rmse_scores)/len(cv_rmse_scores)}')
 
-    def predict(self, X_test: pd.DataFrame) -> np.array:
+    def predict(self, X_test: np.array) -> np.array:
         '''
         Make predictions on the test set
 
@@ -89,7 +90,7 @@ class LassoReg(Lasso):
         return super().predict(X_test)
 
 
-    def test_scores(self, y_test: pd.Series, y_pred: np.array) -> None:
+    def test_scores(self, y_test: np.array, y_pred: np.array) -> None:
         '''
         Compute scores on the test set
 

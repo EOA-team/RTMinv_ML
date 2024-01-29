@@ -73,7 +73,7 @@ class RF(RandomForestRegressor):
         print(f'Mean CV RMSE: {sum(cv_rmse_scores)/len(cv_rmse_scores)}')
 
 
-    def predict(self, X_test: pd.DataFrame) -> np.array:
+    def predict(self, X_test: np.array) -> np.array:
         '''
         Make predictions on test set
 

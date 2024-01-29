@@ -11,6 +11,7 @@ import pandas as pd
 from typing import Optional
 import pickle
 import numpy as np
+from tqdm import tqdm
 
 class SVRReg(SVR):
     def __init__(self, kernel='rbf', degree=3, gamma='scale', coef0=0.0, tol=0.001, C=1.0, epsilon=0.1, shrinking=True, cache_size=200, verbose=False, max_iter=-1, k_folds: Optional[int] = 5):
@@ -45,7 +46,7 @@ class SVRReg(SVR):
         )
         self.k_folds = k_folds
 
-    def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
+    def fit(self, X: np.array, y: np.array) -> None:
         '''
         Fit the model on the training set, using k-fold cross-validation if possible
 
@@ -63,9 +64,9 @@ class SVRReg(SVR):
             cv_rmse_scores = []
 
             # Loop through each fold
-            for train_idx, val_idx in kf.split(X):
-                X_train_fold, X_val_fold = X.iloc[train_idx], X.iloc[val_idx]
-                y_train_fold, y_val_fold = y.iloc[train_idx], y.iloc[val_idx]
+            for train_idx, val_idx in tqdm(kf.split(X), desc='Training CV fold'):
+                X_train_fold, X_val_fold = X[train_idx], X[val_idx]
+                y_train_fold, y_val_fold = y[train_idx], y[val_idx]
 
                 # Fit the model on the training fold
                 super().fit(X_train_fold, y_train_fold)
@@ -81,7 +82,7 @@ class SVRReg(SVR):
             print(f'Cross-Validation RMSE for each fold: {cv_rmse_scores}')
             print(f'Mean CV RMSE: {sum(cv_rmse_scores)/len(cv_rmse_scores)}')
 
-    def predict(self, X_test: pd.DataFrame) -> np.array:
+    def predict(self, X_test: np.array) -> np.array:
         '''
         Make predictions on the test set
 
@@ -91,7 +92,7 @@ class SVRReg(SVR):
         return super().predict(X_test)
 
 
-    def test_scores(self, y_test: pd.Series, y_pred: np.array) -> None:
+    def test_scores(self, y_test: np.array, y_pred: np.array) -> None:
         '''
         Compute scores on the test set
 
