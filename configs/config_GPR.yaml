@@ -1,18 +1,21 @@
 Model: 
     name : "GPR"
-    n_iter: 2
+    n_iter: 43
     n_initial: 50
-    max_samples: 100
-    max_queries: 100
-    strategy: 'cbd'
-    save: False
+    max_samples: 1000
+    max_queries: 950
+    strategy: 'ebd'
+    save: True
+    save_path: 'GPR_nosoil_test.pkl'
+
 
 Seed: 42
 
 Data:
-    data_path : '../results/lut_based_inversion/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints.pkl'
-    train_cols : ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
+    data_path : ['../results/lut_based_inversion/prosail_danner-etal_switzerland_S2A_lai-cab-ccc-car_lut_no-constraints.pkl', '../results/lut_based_inversion/prosail_danner-etal_switzerland_S2B_lai-cab-ccc-car_lut_no-constraints.pkl']
+    train_cols : ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
     target_col : 'lai'   
     test_size : 0.2 
+    normalize: True
 
 

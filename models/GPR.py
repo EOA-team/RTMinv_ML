@@ -1,4 +1,5 @@
 from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process._gpr import _check_optimize_result
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 from sklearn.metrics import mean_squared_error
 import pandas as pd
@@ -10,10 +11,34 @@ from modAL.uncertainty import uncertainty_sampling
 from sklearn.model_selection import train_test_split, KFold
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity, pairwise_distances, pairwise_distances_argmin_min
+from tqdm import tqdm 
+import scipy.optimize
 
 
+class MyGPR(GaussianProcessRegressor):
+    '''
+    Gaussian Process Regressor model
+
+    :params: See GaussianProcessActiveLearner
+    '''
+    def __init__(self, alpha=1e-10, kernel=None, n_restarts_optimizer=0, random_state=None, copy_X_train=True, _max_iter=2e05):
+        super().__init__(alpha=alpha, kernel=kernel, n_restarts_optimizer=n_restarts_optimizer, random_state=random_state, copy_X_train=copy_X_train)
+        self._max_iter = _max_iter
+
+    def _constrained_optimization(self, obj_func, initial_theta, bounds):
+        if self.optimizer == "fmin_l_bfgs_b":
+            opt_res = scipy.optimize.minimize(obj_func, initial_theta, method="L-BFGS-B", jac=True, bounds=bounds, options={'maxiter':self._max_iter})
+            _check_optimize_result("lbfgs", opt_res)
+            theta_opt, func_min = opt_res.x, opt_res.fun
+        elif callable(self.optimizer):
+            theta_opt, func_min = self.optimizer(obj_func, initial_theta, bounds=bounds)
+        else:
+            raise ValueError("Unknown optimizer %s." % self.optimizer)
+        return theta_opt, func_min
+        
+        
 class GaussianProcessActiveLearner:
-    def __init__(self, n_initial=100, n_iter=10, max_samples=5000, max_samples_per_query=100, alpha=1e-10, kernel=None, n_restarts_optimizer=0, max_queries=100, strategy='std', random_state=42):
+    def __init__(self, n_initial=100, n_iter=10, max_samples=5000, max_samples_per_query=100, alpha=1e-10, kernel=None, n_restarts_optimizer=0, max_queries=100, strategy='std', random_state=42, max_iter=2000000):
         '''
         Gaussian Process Regressor model with Active Learning
 
@@ -24,10 +49,11 @@ class GaussianProcessActiveLearner:
         :param alpha: Value added to the diagonal of the kernel matrix during fitting.
         :param kernel: Kernel specifying the covariance function of the GP.
         :param n_restarts_optimizer: The number of restarts of the optimizer for finding the kernel's parameters.
-        :param max_queries: max queries that can be done in training, One query could return multiple new samples (depends on sampling strategy)
+        :param max_queries: max queries that can be done in training, One query could return multiple new samples (depends on sampling strategy). 
         :param strategy: querying strategy among uncertainty 'std', entropy 'entropy',
         euclidian based diversity 'ebd', angle based diversity 'abd', cluster based diversity 'cbd',
         :param random_state: 
+        :param _max_iter: max iter in GPR optimizer
         '''
         if kernel is None:
             # Use a default RBF kernel if not provided
@@ -43,6 +69,7 @@ class GaussianProcessActiveLearner:
         self.max_queries = max_queries
         self.strategy = strategy
         self.random_state = random_state
+        self.max_iter = max_iter
         
         # Create an active learner instance
         self.active_learner = None
@@ -137,7 +164,6 @@ class GaussianProcessActiveLearner:
         # Return the tuple of indices and samples
         return np.array(query_indices), np.array(query_samples)
 
-
     
     def entropy(self, regressor, X):
         ''' 
@@ -163,7 +189,7 @@ class GaussianProcessActiveLearner:
         return query_idx, X[query_idx]
 
 
-    def initialize_active_learner(self, X_initial: pd.DataFrame, y_initial: pd.Series) -> None:
+    def initialize_active_learner(self, X_initial: np.array, y_initial: np.array) -> None:
         ''' 
         Setup up the active learner
 
@@ -172,19 +198,20 @@ class GaussianProcessActiveLearner:
         '''
 
         # Initialize the Gaussian Process Regressor
-        regressor = GaussianProcessRegressor(
+        regressor = MyGPR(
             alpha=self.alpha,
             kernel=self.kernel,
             n_restarts_optimizer=self.n_restarts_optimizer,
             random_state=self.random_state,
-            copy_X_train=False
+            copy_X_train=False,
+            _max_iter=self.max_iter
         )
 
         # Initialize the active learner
         self.active_learner = ActiveLearner(
             estimator=regressor,
-            X_training=X_initial.values.reshape(-1, X_initial.shape[1]),
-            y_training=y_initial.values.reshape(-1, 1),
+            X_training=X_initial.reshape(-1, X_initial.shape[1]),
+            y_training=y_initial.reshape(-1, 1),
             query_strategy=self.get_sampling_strategy()
         )
 
@@ -192,7 +219,8 @@ class GaussianProcessActiveLearner:
 
 
 
-    def fit(self, X_train: pd.DataFrame, y_train: pd.Series, X_test: pd.DataFrame, y_test: pd.Series) -> None:
+    
+    def fit(self, X_train: np.array, y_train: np.array, X_test: np.array, y_test: np.array) -> None:
         '''
         Fit the model with active learning.
         The data will be split in len(X_train)/max_samples subsets.
@@ -211,28 +239,21 @@ class GaussianProcessActiveLearner:
 
         rmse_scores = []
         avg_std = []
-        for _ in range(self.n_iter):
-            subset_index, val_index = next(kf.split(X_train))
+        for _ in tqdm(range(self.n_iter), desc='Iteration'):
+            _, subset_index = next(kf.split(X_train))
 
             # Get the current subset to work on
-            X_train_sub = X_train.iloc[subset_index]
-            y_train_sub = y_train.iloc[subset_index]
-
-            # use remaining samples as test set
-            X_val = X_train.iloc[val_index]
-            y_val = y_train.iloc[val_index]
+            X_train_sub = X_train[subset_index][:self.max_samples] # trim if necessary
+            y_train_sub = y_train[subset_index][:self.max_samples]
 
             # Split the training subset into an initial pool and remaining samples
             X_initial, X_remaining, y_initial, y_remaining = train_test_split(
                 X_train_sub, y_train_sub, train_size=self.n_initial, random_state=self.random_state
             )
-            X_remaining = X_remaining.values # Convert to right format for later
-            y_remaining = y_remaining.values
 
             self.initialize_active_learner(X_initial=X_initial, y_initial=y_initial)
-
             # Perform active learning until reaching self.max_samples in total
-            samples_queried = 0
+            samples_queried = self.n_initial
             sampling_iter = 0
             self.best_model = None
             best_rmse = np.inf
