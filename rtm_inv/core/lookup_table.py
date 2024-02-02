@@ -277,6 +277,7 @@ def generate_lut(
         remove_invalid_green_peaks: Optional[bool] = False,
         linearize_lai: Optional[bool] = False,
         fixed_angles: Optional[bool] = False,
+        rsoil0: Optional[np.array] = None,
         **kwargs
 ) -> pd.DataFrame:
     """
@@ -334,6 +335,7 @@ def generate_lut(
         if True, then angles are the considered constant (e.g. when generating 
         LUT for a single scene). If False, the range and distirbution of the
         angles shuld be provided in te lut_params csv
+    :param rsoil0: soil spectra. 2101-element array with reflectance values between 400 and 2500nm
     :param kwargs:
         optional keyword-arguments to pass to `LookupTable.generate_samples`
     :returns:
@@ -359,7 +361,8 @@ def generate_lut(
     lut_simulations = rtm.simulate_spectra(
         sensor=sensor,
         fpath_srf=fpath_srf,
-        remove_invalid_green_peaks=remove_invalid_green_peaks
+        remove_invalid_green_peaks=remove_invalid_green_peaks,
+        rsoil0=rsoil0
     )
     # linearize LAI as proposed by Verhoef et al. (2018,
     # https://doi.org/10.1016/j.rse.2017.08.006)

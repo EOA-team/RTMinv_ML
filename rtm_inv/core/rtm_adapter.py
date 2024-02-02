@@ -108,7 +108,7 @@ class RTM:
         sensor: str,
         output: Optional[str] = 'R_TOC',
         doy: Optional[int] = 100
-    ) -> None:
+        ) -> None:
         """
         Runs the SPART RTM.
 
@@ -174,7 +174,8 @@ class RTM:
         self,
         sensor: str,
         fpath_srf: Optional[Path] = None,
-        remove_invalid_green_peaks: Optional[bool] = False
+        remove_invalid_green_peaks: Optional[bool] = False,
+        rsoil0: Optional[np.array] = False,
     ) -> None:
         """
         Runs the ProSAIL RTM.
@@ -189,6 +190,7 @@ class RTM:
         :param remove_invalid_green_peaks:
             remove simulated spectra with unrealistic green peaks (occuring at wavelengths > 547nm)
             as suggested by Wocher et al. (2020, https://doi.org/10.1016/j.jag.2020.102219).
+        :param rsoil0: 2101-element array, soil reflectance spectrum
         """
         # check if Prospect version
         if set(ProSAILParameters.prospect5).issubset(set(self._lut.samples.columns)):
@@ -242,6 +244,10 @@ class RTM:
             record_inp.update({
                 'prospect_version': prospect_version
             })
+            if rsoil0 is not None:
+                record_inp.update({
+                'rsoil0': rsoil0
+                })
             # run ProSAIL
             try:
                 spectrum = prosail.run_prosail(**record_inp)
