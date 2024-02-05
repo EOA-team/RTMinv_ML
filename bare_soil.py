@@ -124,9 +124,10 @@ def extract_s2_data(
     # the data is extract for the extent of the parcel
     scene_kwargs = {
         'scene_constructor': Sentinel2.from_safe,            # this tells the mapper how to read and load the data (i.e., Sentinel-2 scenes)
-        'scene_constructor_kwargs': {},                      # here you could specify which bands to read
+        'scene_constructor_kwargs': {'band_selection': ['B01','B02','B03', 'B04', 'B05', 'B06', 'B07', 'B08','B8A', 'B11', 'B12', 'SCL']}, # here you could specify which bands to read
         'scene_modifier': preprocess_sentinel2_scenes,       # this tells the mapper about (optional) pre-processing of the loaded scenes (must be a callable)
-        'scene_modifier_kwargs': {'target_resolution': 10}   # here, you have to specify the value of the arguments the `scene_modifier` requires
+        'scene_modifier_kwargs': {'target_resolution': spatial_resolution
+        }   # here, you have to specify the value of the arguments the `scene_modifier` requires
     }
     mapper.load_scenes(scene_kwargs=scene_kwargs)
 
@@ -224,10 +225,14 @@ def filter_dataframe(df, lower_threshold, upper_threshold, bands):
     :param bands: columns in df that correspond to bands to filter
     '''
     for band in bands:
-        lower_thr = lower_threshold[band]
-        upper_thr = upper_threshold[band]
-        # Set values outside the threshold to np.nan
-        df[band] = np.where((df[band] < lower_thr) | (df[band] > upper_thr), np.nan, df[band])
+        if band == 'B01':
+            # don't use B01 for filtering, just for future interpolation
+            continue
+        else:
+            lower_thr = lower_threshold[band]
+            upper_thr = upper_threshold[band]
+            # Set values outside the threshold to np.nan
+            df[band] = np.where((df[band] < lower_thr) | (df[band] > upper_thr), np.nan, df[band])
     
     df = df.dropna()
     return df
@@ -282,7 +287,7 @@ def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold):
       """
 
       # Apply k-means clustering on the pixel data
-      num_clusters = 5
+      num_clusters = min(5, len(pixs))
       kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init='auto')
       pixs['cluster'] = kmeans.fit_predict(pixs[bands])
 
@@ -345,7 +350,7 @@ def resample_df(df_sampled, s2a, s2b):
 
   for df in df_list:
     if len(df):
-      s2_vals = df[['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']]
+      s2_vals = df[['B01','B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']]
 
       # Resample to 1nm
       if np.unique(df.sensor) == 'Sentinel-2A':
@@ -368,8 +373,8 @@ if __name__ == '__main__':
     date_start = '2017-03-01'
     date_end = '2023-12-31'
 
-    s2a = [492.4, 559.8, 664.6, 704.1, 740.5, 782.8, 832.8, 864.7, 1613.7, 2202.4]
-    s2b = [492.1, 559.0, 664.9, 703.8, 739.1, 779.7, 832.9, 864.0, 1610.4, 2185.7]
+    s2a = [442.7, 492.4, 559.8, 664.6, 704.1, 740.5, 782.8, 832.8, 864.7, 1613.7, 2202.4]
+    s2b = [442.2, 492.1, 559.0, 664.9, 703.8, 739.1, 779.7, 832.9, 864.0, 1610.4, 2185.7]
     new_wavelengths = np.arange(400, 2501, 1)
 
     soil_spectra = pd.DataFrame()
