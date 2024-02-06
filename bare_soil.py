@@ -11,6 +11,7 @@ from typing import List
 from shapely.geometry import Polygon, MultiPolygon
 from datetime import datetime, timedelta
 from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
@@ -238,7 +239,94 @@ def filter_dataframe(df, lower_threshold, upper_threshold, bands):
     return df
 
 
-def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold):
+def find_optimal_clusters(data, max_clusters=10):
+    silhouette_scores = []
+
+    for i in range(2, max_clusters + 1):
+        kmeans = KMeans(n_clusters=i, random_state=42, n_init='auto')
+        kmeans.fit(data)
+        if i > 2:
+            silhouette_scores.append(silhouette_score(data, kmeans.labels_))
+
+    # Find the optimal number of clusters
+    optimal_clusters = silhouette_scores.index(max(silhouette_scores)) + 2  # Adding 2 due to starting from 2 clusters
+
+    """
+    # Plot silhouette scores
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(3, max_clusters + 1), silhouette_scores, marker='o')
+    plt.title('Silhouette Scores for Optimal Number of Clusters')
+    plt.xlabel('Number of Clusters')
+    plt.ylabel('Silhouette Score')
+    plt.show()
+    """
+
+    return optimal_clusters
+
+
+def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_scenes, samples_per_cluster):
+  '''
+  Use the top num_scenes scenes where there were the most number of bare pixels (clearest days with bare pixels.
+  Gather all pixels and perform k-means clustering, then sample samples_per_cluster from each cluster.
+
+  :param scoll: EOdal scene collection
+  :param metadta: metadata dataframe
+  :param lower_threshold: dictionary with lower thresh values for each band
+  :param upper_threshold: dictionary with upper thresh values for each band
+  :param num_scenes: number of scenes to keep in orer of count of bare soil pixels
+  :param samples_per_cluster: number of samples to get from each cluster
+
+  :returns: dataframe with sampled pixels
+  '''
+
+  bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A','B11', 'B12']
+  pixs_df = pd.DataFrame()
+
+  for i, row in metadata.sort_values(by='n_bare', ascending=False).head(num_scenes).iterrows():
+    date = row['sensing_date']
+    sensor = row['spacecraft_name']
+
+    # Get scene for that date
+    scoll_idx = [i for i, _ in scoll if i.date()==date][0]
+    scene = scoll.__getitem__(scoll_idx) # get scene collection
+
+    # Get pixels in scene
+    pixs = scene.to_dataframe()
+
+    # Remove top and botthom 1% for each band 
+    pixs = filter_dataframe(pixs, lower_threshold, upper_threshold, bands)
+
+    if len(pixs):
+      # Add some useful metadata: sensing date, sensor
+      pixs['sensing_date'] = [date]*len(pixs)
+      pixs['sensor'] = [sensor]*len(pixs)
+      pixs_df = pd.concat([pixs_df, pixs])
+  
+  # Apply k-means clustering on the pixel dataset
+  optimal_clusters = find_optimal_clusters(pixs_df[bands], max_clusters=10)
+  num_clusters = min(optimal_clusters, len(pixs_df))
+  print(f'Sampling from {num_clusters} clusters')
+  if len(pixs_df)<=num_clusters:
+    print('Warning: all pixels will be sampled as ther are not enough samples for k-means clustering')
+  kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init='auto')
+  pixs_df['cluster'] = kmeans.fit_predict(pixs_df[bands])
+
+  # Sample one pixel from each cluster
+  samples = []
+  for cluster_id in range(num_clusters):
+    cluster_pixs = pixs_df[pixs_df['cluster'] == cluster_id]
+    if not cluster_pixs.empty:
+      # Sample one pixel from this cluster
+      sampled_rows = cluster_pixs.sample(samples_per_cluster)
+      samples.extend(sampled_rows.to_dict(orient='records'))
+
+  # Convert GeoDataFrames to DataFrames before creating the final DataFrame
+  df_sampled = pd.DataFrame(samples)
+
+  return df_sampled
+
+
+def sample_bare_pixels_perdate(scoll, metadata, lower_threshold, upper_threshold, num_scenees):
   '''
   Sample bare pixels from scenes based on k-means clustering.
   Use the top 3 scenes where there were the most number of bare pixels (clearest days with bare pixels)
@@ -246,7 +334,8 @@ def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold):
   :param scoll: EOdal scene collection
   :param metadta: metadata dataframe
   :param lower_threshold: dictionary with lower thresh values for each band
-  :param upper_threshol: dictionary with upper thresh values for each band
+  :param upper_threshold: dictionary with upper thresh values for each band
+  :param num_scenes: number of scenes to keep in orer of count of bare soil pixels
 
   :returns: dataframe with sampled pixels
   '''
@@ -254,7 +343,7 @@ def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold):
   bands = ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A','B11', 'B12']
   samples = []
 
-  for i, row in metadata.sort_values(by='n_bare', ascending=False).head(3).iterrows():
+  for i, row in metadata.sort_values(by='n_bare', ascending=False).head(num_scenees).iterrows():
     date = row['sensing_date']
     sensor = row['spacecraft_name']
 
@@ -393,14 +482,22 @@ if __name__ == '__main__':
         aoi = gpd.read_file(shp_path).dissolve()
         aoi = aoi.to_crs('EPSG:2056')
         aoi_with_buffer = aoi.copy()
-        buffer_distance = -20 # in meters
+        buffer_distance = -60 # in meters
         aoi_with_buffer['geometry'] = aoi.buffer(buffer_distance)
-        aoi_with_buffer = aoi_with_buffer.to_crs('EPSG:4326')
+
+        # Take extra surrounding fields using GeoWP
+        geowp_path = '/home/f80873755@agsad.admin.ch/mnt/Data-Work-RE/27_Natural_Resources-RE/99_GIS_User_protected/GeoWP/Landuse/Landw_Kulturflaechen/2021/01_Geodata/SHP/Nutzungsflaechen_BLW_Schweizweit_merge/ln_nutzung_BLW_2021_CH.shp'
+        geowp = gpd.read_file(geowp_path).to_crs(aoi.crs)
+        geowp = geowp.cx[aoi.total_bounds[0]:aoi.total_bounds[2], aoi.total_bounds[1]:aoi.total_bounds[3]]
+        geowp_with_buffer = geowp.copy()
+        buffer_distance = -60 # in meters, if the crs of the gdf is metric
+        geowp_with_buffer['geometry'] = geowp.buffer(buffer_distance)
+        geom = gpd.overlay(aoi_with_buffer.to_crs(geowp_with_buffer.crs), geowp_with_buffer, how='union')
 
         # Get data if not done yet
         if not save_path.exists() or not metadata_path.exists():
             res_baresoil = extract_s2_data(
-            aoi=aoi_with_buffer,
+            aoi=geom,
             time_start=datetime.strptime(date_start, '%Y-%m-%d'),
             time_end=datetime.strptime(date_end, '%Y-%m-%d')
             )
@@ -420,11 +517,13 @@ if __name__ == '__main__':
         lower_threshold, upper_threshold = compute_scoll_percentiles(scoll)
 
         # Sample pixels: 5 pixs per date, for top3 dates with most bare pixels
-        df_sampled = sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold)
+        df_sampled = sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_scenes=6, samples_per_cluster=5)
+        sampled_path = base_dir.joinpath(f'results/sampled_pixels_{path_suffix}.pkl')
+        with open(sampled_path, 'wb+') as dst:
+            pickle.dump(df_sampled, dst)
 
         # Resample to 1nm 
         spectra = resample_df(df_sampled, s2a, s2b)
-
         spectra_path = base_dir.joinpath(f'results/sampled_spectra_{path_suffix}.pkl')
         with open(spectra_path, 'wb+') as dst:
             pickle.dump(spectra, dst)
@@ -432,11 +531,13 @@ if __name__ == '__main__':
         soil_spectra = pd.concat([soil_spectra, spectra])
         print('Done.')
     
+
     print('Saving all samples...')
     spectra_path = base_dir.joinpath(f'results/sampled_spectra_all.pkl')
     with open(spectra_path, 'wb+') as dst:
         pickle.dump(soil_spectra, dst)
     print('Finished.')
+
     
 
 
