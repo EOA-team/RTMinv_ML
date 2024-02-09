@@ -38,7 +38,7 @@ import pickle
 def preprocess_sentinel2_scenes(
     ds: Sentinel2,
     target_resolution: int,
-) -> Sentinel2:
+    ) -> Sentinel2:
     """
     Resample Sentinel-2 scenes and mask clouds, shadows, and snow
     based on the Scene Classification Layer (SCL).
@@ -124,7 +124,7 @@ def extract_s2_data(
     # the data is extract for the extent of the parcel
     scene_kwargs = {
         'scene_constructor': Sentinel2.from_safe,            # this tells the mapper how to read and load the data (i.e., Sentinel-2 scenes)
-        'scene_constructor_kwargs': {},                      # here you could specify which bands to read
+        'scene_constructor_kwargs': {'band_selection': ['B01','B02','B03', 'B04', 'B05', 'B06', 'B07', 'B08','B8A', 'B11', 'B12', 'SCL']},                      # here you could specify which bands to read
         'scene_modifier': preprocess_sentinel2_scenes,       # this tells the mapper about (optional) pre-processing of the loaded scenes (must be a callable)
         'scene_modifier_kwargs': {'target_resolution': 10}   # here, you have to specify the value of the arguments the `scene_modifier` requires
     }
@@ -179,9 +179,7 @@ if __name__ == '__main__':
   # Path to validation in situ measurements
   lai_path = base_dir.joinpath('data/in-situ_glai.gpkg')
   gdf = gpd.read_file(lai_path)
-  # Keep only locations of interest
-  gdf = gdf[gdf.location.isin(['Strickhof', 'SwissFutureFarm', 'Witzwil'])]
-
+  locations = ['Strickhof', 'SwissFutureFarm', 'Witzwil']
 
   # Loop over dates of val data
   # Query s2 data for those dates
@@ -190,42 +188,43 @@ if __name__ == '__main__':
 
   val_df = pd.DataFrame()
 
-  for d in gdf['date']:
-    try:
-      s2_data = extract_s2_data(
-        aoi=gdf.dissolve(),
-        time_start=pd.to_datetime(d), 
-        time_end=pd.to_datetime(d) + timedelta(days=1)
-      )
-    except:
-      pass
-      
-    if s2_data.data is not None:
-      for scene_id, scene in s2_data.data:
-        pixs = scene.to_dataframe()
-        pixs = pixs.to_crs('EPSG:4326')
+  for loc in locations:
+    gdf_loc = gdf[gdf.location==loc]
+
+    for d in gdf_loc['date']:
+        try:
+            s2_data = extract_s2_data(
+                aoi=gdf_loc.dissolve(),
+                time_start=pd.to_datetime(d), 
+                time_end=pd.to_datetime(d) + timedelta(days=1)
+            )
+        except:
+            pass
         
-        # Find S2-data closest (within 10m) to validation data for that date
-        gdf_date = gdf[gdf['date'] == d]
-        gdf_date = gdf_date.to_crs(pixs.crs) # to meters, EPSG:32632
+        if s2_data.data is not None:
+            for scene_id, scene in s2_data.data:
+                pixs = scene.to_dataframe()
+                pixs = pixs.to_crs('EPSG:4326')
+                
+                # Find S2-data closest (within 10m) to validation data for that date
+                gdf_date = gdf_loc[gdf_loc['date'] == d]
+                gdf_date = gdf_date.to_crs(pixs.crs) # to meters, EPSG:32632
 
-        pixs_tree = cKDTree(pixs['geometry'].apply(lambda geom: (geom.x, geom.y)).tolist())
+                pixs_tree = cKDTree(pixs['geometry'].apply(lambda geom: (geom.x, geom.y)).tolist())
 
-        # Apply the function to each point in gdf_date
-        nearest_points = gdf_date['geometry'].apply(lambda point: find_nearest(point, pixs_tree))
-        nearest_points = nearest_points.rename(columns={'geometry': 'geometry_s2'})
-        gdf_date = pd.concat([gdf_date[['date', 'lai', 'location', 'geometry']], nearest_points], axis=1)
+                # Apply the function to each point in gdf_date
+                nearest_points = gdf_date['geometry'].apply(lambda point: find_nearest(point, pixs_tree))
+                nearest_points = nearest_points.rename(columns={'geometry': 'geometry_s2'})
+                gdf_date = pd.concat([gdf_date[['date', 'lai', 'location', 'geometry']], nearest_points], axis=1)
 
-        # # Keep if less than 10m away to ensure its the right pixel
-        gdf_date['distance'] = gdf_date.apply(compute_distance, axis=1)      
-        gdf_date = gdf_date[gdf_date['distance'] <10]
-        
-        # Save lai and spectra 
-        if (len(gdf_date)):
-          val_df = pd.concat([val_df, gdf_date[['lai', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12',]]])
+                # # Keep if less than 10m away to ensure its the right pixel
+                gdf_date['distance'] = gdf_date.apply(compute_distance, axis=1)      
+                gdf_date = gdf_date[gdf_date['distance'] <10]
+                
+                # Save lai and spectra 
+                if (len(gdf_date)):
+                    val_df = pd.concat([val_df, gdf_date[['lai', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12','geometry', 'date', 'location']]])
 
-    if len(val_df):
-      break
 
   # Save in-situ val data
   data_path = base_dir.joinpath(f'results/validation_data.pkl')
