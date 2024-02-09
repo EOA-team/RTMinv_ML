@@ -305,6 +305,18 @@ class GaussianProcessActiveLearner:
         return
 
 
+    def test_scores(self, y_test: pd.Series, y_pred: np.array) -> None:
+            '''
+            Compute scores on test set
+
+            :param y_test: test labels
+            :param y_pred: test predictions
+            '''
+            # Compute RMSE on the test set
+            test_rmse = mean_squared_error(y_test, y_pred, squared=False)
+            print(f'Test RMSE: {test_rmse}')
+
+            
     def save(self, model, model_filename: str) -> None:
         ''' 
         Save trained model
