@@ -12,6 +12,7 @@ from datetime import datetime
 from argparse import ArgumentParser
 import yaml
 from typing import Dict, Tuple, Union, Any
+import pickle
 
 from models import MODELS
 
@@ -45,6 +46,12 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
       scaler = MinMaxScaler()
       X_train = scaler.fit_transform(X_train) # becomes an array
       X_test = scaler.transform(X_test)
+      # Save for model inference
+      scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl' \
+        if 'save_path' in config['Model'].keys() \
+        else config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_scaler.pkl' 
+      with open(scaler_path, 'wb') as f:
+        pickle.dump(scaler, f)
       return X_train, X_test, y_train, y_test
     else:
       return X_train.values, X_test.values, y_train, y_test
@@ -53,14 +60,21 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     # Assuming all files in the list are pickled DataFrames
     dfs = [pd.read_pickle(path) for path in data_path]
     concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
-
-    X = concatenated_df[config['Data']['train_cols']]
-    y = concatenated_df[config['Data']['target_col']]
+    # Sample 50000 data pairs
+    sampled_df = concatenated_df.sample(50000, random_state=config['Seed'])
+    X = sampled_df[config['Data']['train_cols']] #  concatenated_df[config['Data']['train_cols']]
+    y = sampled_df[config['Data']['target_col']] #  concatenated_df[config['Data']['target_col']]
     X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
     if config['Data']['normalize']:
       scaler = MinMaxScaler()
       X_train = scaler.fit_transform(X_train) # becomes an array
       X_test = scaler.transform(X_test)
+      # Save for model inference
+      scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl' \
+        if 'save_path' in config['Model'].keys() \
+        else config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_scaler.pkl' 
+      with open(scaler_path, 'wb') as f:
+        pickle.dump(scaler, f)
       return X_train, X_test, y_train, y_test
     else:
       return X_train.values, X_test.values, y_train, y_test
@@ -97,7 +111,6 @@ def train_model(config: dict) -> None:
   #############################################
   # DATA
   X_train, X_test, y_train, y_test = prepare_data(config=config)
-  
 
   #############################################
   # MODEL
