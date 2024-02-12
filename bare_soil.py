@@ -12,7 +12,7 @@ from shapely.geometry import Polygon, MultiPolygon
 from datetime import datetime, timedelta
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, pchip_interpolate
 import matplotlib.pyplot as plt
 
 import os
@@ -394,34 +394,48 @@ def sample_bare_pixels_perdate(scoll, metadata, lower_threshold, upper_threshold
   return df_sampled
 
 
-def upsample_spectra(df, wavelengths, new_wavelengths):
+def upsample_spectra(df, wavelengths, new_wavelengths, method):
     '''
     Upsample spectra from a sensor
 
     :param df: dataframe containing pixel spectra all oroginaitng from one sensor
     :param wavelengths: sensor wavelengths
-    :param new_wavelengths: wavelengths to upsample to
+    :param new_wavelengths: wavelengths to upsample to    
+    :param method: inteprolation method among ['spline', 'pchip']
 
     :returns: same dataframe but upsampled to new_wavelengths
     '''
-    # Interpolate along the rows (pixels) for each wavelength
-    interpolated_data = {}
-    for index, row in df.iterrows():
-        row['2500'] = row.min() # bound the interpolation so that function doesnt explode
-        f = interp1d(wavelengths + [2500], row, kind='cubic', fill_value="extrapolate")
-        interpolated_data[index] = f(new_wavelengths)
+    if method == 'spline':     
+      df.insert(0, '400', df.apply(lambda row: row.min(), axis=1)) # Bound the values for the start of the spectra
+      df.loc[:, '2500'] = df.apply(lambda row: row.min(), axis=1) # Bound the values for the end of the spectra
+      f = interp1d([400] + wavelengths + [2500], df.values, kind='cubic', fill_value="extrapolate")
+      interpolated_values = f(new_wavelengths)
+      interpolated_df = pd.DataFrame(interpolated_values, columns=new_wavelengths, index=df.index)
 
-    # Create a new DataFrame with the interpolated data
-    interpolated_df = pd.DataFrame(interpolated_data, index=new_wavelengths)
 
-    # Transpose the DataFrame to have pixels as columns
-    interpolated_df = interpolated_df.T
+    if method == 'pchip':
+      df.insert(0, '400', df.apply(lambda row: row.min(), axis=1)) # Bound the values for the start of the spectra
+      interpolated_values = pchip_interpolate([400] + wavelengths, df.values.T, new_wavelengths).T
+      interpolated_df = pd.DataFrame(interpolated_values, index=df.index, columns=new_wavelengths)
 
-    # Print the result
+    if method == 'combined':
+      # First part of spectra with spline, second with pchip
+      df.insert(0, '400', df.apply(lambda row: row.min(), axis=1)) # Bound the values for the start of the spectra
+      spline_cols = ['400', 'B01','B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A']
+      f = interp1d([400] + wavelengths[:-2], df[spline_cols].values, kind='cubic', fill_value="extrapolate")
+      interpolated_values_spline = f(new_wavelengths[:865-400])
+      interpolated_df_spline = pd.DataFrame(interpolated_values_spline, columns=new_wavelengths[:865-400], index=df[spline_cols].index)
+      
+      pchip_cols = ['B11', 'B12']
+      interpolated_values_pchip = pchip_interpolate(wavelengths[-2:], df[pchip_cols].values.T, new_wavelengths[865-400:]).T
+      interpolated_df_pchip = pd.DataFrame(interpolated_values_pchip, index=df[pchip_cols].index, columns=new_wavelengths[865-400:])
+
+      interpolated_df = pd.concat([interpolated_df_spline, interpolated_df_pchip], axis=1)
+
     return interpolated_df
 
 
-def resample_df(df_sampled, s2a, s2b):
+def resample_df(df_sampled, s2a, s2b, new_wavelengths, method):
   '''
   Resample all sampled pixels from Sentinel-2A and Sentinel-2B
   
@@ -429,6 +443,7 @@ def resample_df(df_sampled, s2a, s2b):
   :param s2a: wavelengths for Sentinel-2A
   :param s2b: wavelengths for Sentinel-2B
   :param new_wavelengths: wavelegnths to upsample to
+  :param method: inteprolation method among ['spline', 'pchip']
   '''
 
   s2a_df = df_sampled[df_sampled['sensor'] == 'Sentinel-2A']
@@ -443,16 +458,14 @@ def resample_df(df_sampled, s2a, s2b):
 
       # Resample to 1nm
       if np.unique(df.sensor) == 'Sentinel-2A':
-        df_new = upsample_spectra(s2_vals, s2a, new_wavelengths)
+        df_new = upsample_spectra(s2_vals, s2a, new_wavelengths, method)
       if np.unique(df.sensor) == 'Sentinel-2B':
-        df_new = upsample_spectra(s2_vals, s2b, new_wavelengths)
+        df_new = upsample_spectra(s2_vals, s2b, new_wavelengths, method)
       
       # Append
       spectra = pd.concat([spectra, df_new])
   
   return spectra
-
-
 
 
 if __name__ == '__main__':
@@ -477,6 +490,7 @@ if __name__ == '__main__':
         path_suffix = loc.split('.')[0]
         save_path = base_dir.joinpath(f'results/eodal_baresoil_s2_data_{path_suffix}.pkl')
         metadata_path = save_path.with_name(save_path.name.replace('data', 'metadata'))
+        upsample_method = 'pchip'
 
         # Add buffer to remove field edges
         aoi = gpd.read_file(shp_path).dissolve()
@@ -523,7 +537,7 @@ if __name__ == '__main__':
             pickle.dump(df_sampled, dst)
 
         # Resample to 1nm 
-        spectra = resample_df(df_sampled, s2a, s2b)
+        spectra = resample_df(df_sampled, s2a, s2b, new_wavelengths, upsample_method)
         spectra_path = base_dir.joinpath(f'results/sampled_spectra_{path_suffix}.pkl')
         with open(spectra_path, 'wb+') as dst:
             pickle.dump(spectra, dst)
