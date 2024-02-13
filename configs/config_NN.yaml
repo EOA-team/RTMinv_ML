@@ -8,8 +8,9 @@ Model:
     optim: 
         name: Adam
         lr: 0.01
-    save: True
+    save: False
     save_path: 'NN_nosoil_test.pkl'
+    gpu : True
 
 Seed: 42
 

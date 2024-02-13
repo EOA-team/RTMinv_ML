@@ -4,6 +4,7 @@ Train a model to perform a RTM inversion
 @author Selene Ledain
 '''
 
+import os
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -13,6 +14,7 @@ from argparse import ArgumentParser
 import yaml
 from typing import Dict, Tuple, Union, Any
 import pickle
+import torch
 
 from models import MODELS
 
@@ -112,12 +114,24 @@ def train_model(config: dict) -> None:
   # DATA
   X_train, X_test, y_train, y_test = prepare_data(config=config)
 
+  # Move data to CUDA if GPUs requested and available
+  device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
+  X_train, X_test, y_train, y_test = (
+      torch.FloatTensor(X_train).to(device),
+      torch.FloatTensor(X_test).to(device),
+      torch.FloatTensor(y_train).view(-1, 1).to(device),
+      torch.FloatTensor(y_test).view(-1, 1).to(device),
+  )
+
   #############################################
   # MODEL
+  if config['Model'].pop('gpu') and torch.cuda.is_available():
+    print('Using GPUs')
   save_model = config['Model'].pop('save')
   model_name = config['Model']['name']
   model_filename = config['Model'].pop('save_path') if 'save_path' in config['Model'].keys() else model_name + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.pkl' # path to save trained model 
-  model = build_model(config=config)
+  model = build_model(config=config).to(device)
+  
    
   #############################################
   # TRAIN

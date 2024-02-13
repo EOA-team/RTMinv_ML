@@ -30,7 +30,7 @@ class SimpleNeuralNetwork(nn.Module):
     x = self.sigmoid(x)
     return x
 
-class NeuralNetworkRegressor:
+class NeuralNetworkRegressor(nn.Module):
   def __init__(self, input_size, hidden_size, output_size, epochs=100, batch_size=32, 
   optim={'name': 'Adam', 'learning_rate': 0.01}, random_state=42):
       '''
@@ -45,6 +45,8 @@ class NeuralNetworkRegressor:
       :param optim_kwargs: optimizer name (see torch.optim) and parameters to set it up
       :param random_state: 
       '''
+      super(NeuralNetworkRegressor, self).__init__()
+
       self.model = SimpleNeuralNetwork(input_size, hidden_size, output_size)
       self.epochs = epochs
       self.batch_size = batch_size
@@ -72,6 +74,9 @@ class NeuralNetworkRegressor:
       else:
         raise Exception(f'Optimizer {optim_kwargs["name"]} not implemented, please select another')
 
+  def forward(self, x):
+        return self.model(x)
+        
 
   def fit(self, X: np.array, y:np.array):
       '''
