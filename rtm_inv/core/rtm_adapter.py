@@ -176,6 +176,8 @@ class RTM:
         fpath_srf: Optional[Path] = None,
         remove_invalid_green_peaks: Optional[bool] = False,
         rsoil0: Optional[np.array] = False,
+        soil_spectrum1: Optional[np.array] = False,
+        soil_spectrum2: Optional[np.array] = False,
     ) -> None:
         """
         Runs the ProSAIL RTM.
@@ -190,7 +192,10 @@ class RTM:
         :param remove_invalid_green_peaks:
             remove simulated spectra with unrealistic green peaks (occuring at wavelengths > 547nm)
             as suggested by Wocher et al. (2020, https://doi.org/10.1016/j.jag.2020.102219).
-        :param rsoil0: 2101-element array, soil reflectance spectrum
+        :param rsoil0: soil spectra. 2101-element array with reflectance values between 400 and 2500nm. rsoil0 = rsoil * (psoil * soil_spectrum1 + (1.0 - psoil) * soil_spectrum2)
+        :param soil_spectrum1: dry soil spectra. (will be scaled by rsoil and psoil in lut params). 2101-element array with reflectance values between 400 and 2500nm. 
+            Should be provided with soil_spectrum2
+        :param soil_spectrum2: wet soil spectra. 2101-element array with reflectance values between 400 and 2500nm
         """
         # check if Prospect version
         if set(ProSAILParameters.prospect5).issubset(set(self._lut.samples.columns)):
@@ -247,6 +252,11 @@ class RTM:
             if rsoil0 is not None:
                 record_inp.update({
                 'rsoil0': rsoil0
+                })
+            if soil_spectrum1 is not None:
+                record_inp.update({
+                'soil_spectrum1': soil_spectrum1,
+                'soil_spectrum2': soil_spectrum2
                 })
             # run ProSAIL
             try:

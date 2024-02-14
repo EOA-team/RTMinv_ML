@@ -119,11 +119,15 @@ def generate_spectra_soil(
   # generate lookup-table
   trait_str = '-'.join(traits)
   fpath_lut = output_dir.joinpath(
-    f'{pheno_phases}_{trait_str}_lut_no-constraints_soil.pkl')
+    f'{pheno_phases}_{trait_str}_lut_no-constraints_soil2.pkl')
 
   # Add soil spectra to inputs
+  # one method is to provide the spectra as rsoil0, but then it will not be scaled by the brightness and wetness params rsoil and psoil
+  # provide the spectra as soil_spectrum1 with soil_spectrum2 as zeros to utilise the sclaing
   lut_inp = rtm_lut_config.copy()
-  lut_inp['rsoil0'] = soil_spectra
+  #lut_inp['rsoil0'] = soil_spectra
+  lut_inp['soil_spectrum1'] = soil_spectra 
+  lut_inp['soil_spectrum2'] = np.zeros_like(soil_spectra) 
   lut_inp['lut_params'] = lut_params_pheno
   lut = generate_lut(**lut_inp) # TO DO: need to modify function so that it simulates for a range of angles
 
@@ -224,7 +228,6 @@ if __name__ == '__main__':
     n_samples_per_spectra = rtm_lut_config['lut_size']//len(soil_df) # number of samples to generate with one soil spectra
     for i, row in soil_df.iterrows():
       soil_spectra = row.values # convert to a np.array
-      #print(soil_spectra.shape)
       rtm_lut_config['lut_size'] = n_samples_per_spectra
 
       # Call generate_spectra with soil and n_samples_per_spectra
