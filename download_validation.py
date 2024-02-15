@@ -195,7 +195,7 @@ if __name__ == '__main__':
         try:
             s2_data = extract_s2_data(
                 aoi=gdf_loc.dissolve(),
-                time_start=pd.to_datetime(d), 
+                time_start=pd.to_datetime(d) - timedelta(days=1), 
                 time_end=pd.to_datetime(d) + timedelta(days=1)
             )
         except:
@@ -226,7 +226,8 @@ if __name__ == '__main__':
                     val_df = pd.concat([val_df, gdf_date[['lai', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12','geometry', 'date', 'location']]])
 
 
+
   # Save in-situ val data
-  data_path = base_dir.joinpath(f'results/validation_data.pkl')
+  data_path = base_dir.joinpath(f'results/validation_data2.pkl')
   with open(data_path, 'wb+') as dst:
       pickle.dump(val_df, dst)
