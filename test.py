@@ -116,7 +116,8 @@ def test_model(config: dict) -> None:
   #############################################
   # TEST
   if model_name == 'GPR': # Active learning
-    y_pred, y_std = model.predict(X_test, return_std=True) 
+    y_pred, y_std = model.predict(X_test, return_std=True)
+    print('Mean test std', y_std.mean()) 
     model.test_scores(y_test=y_test, y_pred=y_pred)
   else: 
     y_pred = model.predict(X_test=X_test)

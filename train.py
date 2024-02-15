@@ -116,22 +116,30 @@ def train_model(config: dict) -> None:
 
   # Move data to CUDA if GPUs requested and available
   device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
-  X_train, X_test, y_train, y_test = (
+  if device == torch.device('cuda'):
+    X_train, X_test, y_train, y_test = (
       torch.FloatTensor(X_train).to(device),
       torch.FloatTensor(X_test).to(device),
       torch.FloatTensor(y_train).view(-1, 1).to(device),
       torch.FloatTensor(y_test).view(-1, 1).to(device),
-  )
+    ) 
 
   #############################################
   # MODEL
-  if config['Model'].pop('gpu') and torch.cuda.is_available():
+  if config['Model'].get('gpu') and torch.cuda.is_available():
     print('Using GPUs')
+  if 'gpu' in config['Model'].keys():
+    config['Model'].pop('gpu')
+
   save_model = config['Model'].pop('save')
   model_name = config['Model']['name']
   model_filename = config['Model'].pop('save_path') if 'save_path' in config['Model'].keys() else model_name + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.pkl' # path to save trained model 
-  model = build_model(config=config).to(device)
-  
+  model = build_model(config=config)
+  if device == torch.device('cuda'):
+    model.to(device)
+  #print(f"Model on: {next(model.parameters()).device}")
+  #print(f"Data on: {X_train.device}")
+
    
   #############################################
   # TRAIN
