@@ -23,6 +23,7 @@ class SimpleNeuralNetwork(nn.Module):
     self.fc2 = nn.Linear(hidden_size, output_size)
     self.sigmoid = nn.Sigmoid()
 
+
   def forward(self, x):
     x = self.fc1(x)
     x = self.relu(x)
@@ -74,25 +75,25 @@ class NeuralNetworkRegressor(nn.Module):
       else:
         raise Exception(f'Optimizer {optim_kwargs["name"]} not implemented, please select another')
 
+
   def forward(self, x):
         return self.model(x)
         
 
-  def fit(self, X: np.array, y:np.array):
+  def fit(self, X: np.array, y: np.array):
       '''
       Fit the model on the training set
-
-      :param X: training features
-      :param y: training labels
+      :param X: training features. Is tensor if GPU used
+      :param y: training labels. Is tensor if GPU used
       '''
       torch.manual_seed(self.random_state)
-
       # Convert NumPy arrays to PyTorch tensors
-      X_train_tensor = torch.FloatTensor(X)
-      y_train_tensor = torch.FloatTensor(y).view(-1, 1)
+      if not isinstance(X, torch.Tensor) or not isinstance(y, torch.Tensor):
+        X = torch.FloatTensor(X)
+        y = torch.FloatTensor(y).view(-1, 1)
 
       # Create a DataLoader for batch training
-      train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+      train_dataset = TensorDataset(X, y)
       train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
 
       # Training loop

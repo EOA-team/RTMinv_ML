@@ -37,6 +37,17 @@ class MyGPR(GaussianProcessRegressor):
         return theta_opt, func_min
         
         
+    def test_scores(self, y_test: pd.Series, y_pred: np.array) -> None:
+            '''
+            Compute scores on test set
+
+            :param y_test: test labels
+            :param y_pred: test predictions
+            '''
+            # Compute RMSE on the test set
+            test_rmse = mean_squared_error(y_test, y_pred, squared=False)
+            print(f'Test RMSE: {test_rmse}')
+        
 class GaussianProcessActiveLearner:
     def __init__(self, n_initial=100, n_iter=10, max_samples=5000, max_samples_per_query=100, alpha=1e-10, kernel=None, n_restarts_optimizer=0, max_queries=100, strategy='std', random_state=42, max_iter=2000000):
         '''
@@ -198,7 +209,7 @@ class GaussianProcessActiveLearner:
         '''
 
         # Initialize the Gaussian Process Regressor
-        regressor = MyGPR(
+        self.regressor = MyGPR(
             alpha=self.alpha,
             kernel=self.kernel,
             n_restarts_optimizer=self.n_restarts_optimizer,
@@ -209,7 +220,7 @@ class GaussianProcessActiveLearner:
 
         # Initialize the active learner
         self.active_learner = ActiveLearner(
-            estimator=regressor,
+            estimator=self.regressor,
             X_training=X_initial.reshape(-1, X_initial.shape[1]),
             y_training=y_initial.reshape(-1, 1),
             query_strategy=self.get_sampling_strategy()
@@ -305,17 +316,6 @@ class GaussianProcessActiveLearner:
         return
 
 
-    def test_scores(self, y_test: pd.Series, y_pred: np.array) -> None:
-            '''
-            Compute scores on test set
-
-            :param y_test: test labels
-            :param y_pred: test predictions
-            '''
-            # Compute RMSE on the test set
-            test_rmse = mean_squared_error(y_test, y_pred, squared=False)
-            print(f'Test RMSE: {test_rmse}')
-
             
     def save(self, model, model_filename: str) -> None:
         ''' 
@@ -326,5 +326,5 @@ class GaussianProcessActiveLearner:
         '''
         # Save the trained model to a file using pickle
         with open(model_filename, 'wb') as file:
-            pickle.dump(model, file)
+            pickle.dump(self.regressor, file)
         print(f'Trained model saved to {model_filename}')
