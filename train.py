@@ -52,6 +52,8 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
       scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl' \
         if 'save_path' in config['Model'].keys() \
         else config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_scaler.pkl' 
+      os.makedirs(os.path.dirname(scaler_path), exist_ok=True)
+      
       with open(scaler_path, 'wb') as f:
         pickle.dump(scaler, f)
       return X_train, X_test, y_train, y_test
@@ -75,6 +77,8 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
       scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl' \
         if 'save_path' in config['Model'].keys() \
         else config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_scaler.pkl' 
+      os.makedirs(os.path.dirname(scaler_path), exist_ok=True)
+
       with open(scaler_path, 'wb') as f:
         pickle.dump(scaler, f)
       return X_train, X_test, y_train, y_test
