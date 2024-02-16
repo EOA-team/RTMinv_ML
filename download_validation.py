@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 import contextily as ctx
 import pandas as pd
 from scipy.spatial import cKDTree
-from shapely.geometry import Point
+from shapely.geometry import Point, box
 from geopy.distance import geodesic
 from pyproj import Proj, transform
 import pickle
@@ -192,6 +192,7 @@ if __name__ == '__main__':
     gdf_loc = gdf[gdf.location==loc]
 
     for d in gdf_loc['date']:
+        print('date', d)
         try:
             s2_data = extract_s2_data(
                 aoi=gdf_loc.dissolve(),
@@ -202,7 +203,9 @@ if __name__ == '__main__':
             pass
         
         if s2_data.data is not None:
+            print('Not null')
             for scene_id, scene in s2_data.data:
+                """
                 pixs = scene.to_dataframe()
                 pixs = pixs.to_crs('EPSG:4326')
                 
@@ -224,7 +227,25 @@ if __name__ == '__main__':
                 # Save lai and spectra 
                 if (len(gdf_date)):
                     val_df = pd.concat([val_df, gdf_date[['lai', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12','geometry', 'date', 'location']]])
-
+                """
+                gdf_date = gdf_loc[gdf_loc['date'] == d]
+                gdf_date = gdf_date.to_crs('EPSG:32632')
+                for i, row in gdf_date.iterrows():
+                    pt = row['geometry']
+                    res = 1 # meter
+                    # Create a box with 1m side centered around pt
+                    bbox = box(pt.x - res/2, pt.y - res/2, pt.x + res/2, pt.y + res/2)
+                    try:
+                        # Clip bands to bbox
+                        scene.clip_bands(clipping_bounds=bbox, inplace=True)
+                        pixs = scene.to_dataframe()
+                        if len(pixs==1):
+                            df_data = pd.DataFrame([row[['date', 'lai', 'location', 'geometry']]])
+                            val_df = pd.concat([val_df, df_data], axis=1)
+                        else:
+                            print(f'Found multiple pixels {len(pixs)}')
+                    except:
+                        pass
 
 
   # Save in-situ val data
