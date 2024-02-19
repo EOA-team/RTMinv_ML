@@ -125,7 +125,7 @@ def extract_s2_data(
     # the data is extract for the extent of the parcel
     scene_kwargs = {
         'scene_constructor': Sentinel2.from_safe,            # this tells the mapper how to read and load the data (i.e., Sentinel-2 scenes)
-        'scene_constructor_kwargs': {'band_selection': ['B01','B02','B03', 'B04', 'B05', 'B06', 'B07', 'B08','B8A', 'B09', 'B11', 'B12', 'SCL']}, # here you could specify which bands to read
+        'scene_constructor_kwargs': {'band_selection': ['B01','B02','B03', 'B04', 'B05', 'B06', 'B07', 'B08','B8A', 'B11', 'B12', 'SCL']}, # here you could specify which bands to read
         'scene_modifier': preprocess_sentinel2_scenes,       # this tells the mapper about (optional) pre-processing of the loaded scenes (must be a callable)
         'scene_modifier_kwargs': {'target_resolution': spatial_resolution
         }   # here, you have to specify the value of the arguments the `scene_modifier` requires
@@ -193,7 +193,7 @@ def compute_scoll_percentiles(scoll):
   '''
   lower_threshold = {}
   upper_threshold = {}
-  bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09', 'B11', 'B12']
+  bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']
 
   for scene_id, scene in scoll:
     df_scene = scene.to_dataframe()
@@ -279,7 +279,7 @@ def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_sc
   :returns: dataframe with sampled pixels
   '''
 
-  bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A','B09', 'B11', 'B12']
+  bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']
   pixs_df = pd.DataFrame()
 
   for i, row in metadata.sort_values(by='n_bare', ascending=False).head(num_scenes).iterrows():
@@ -421,7 +421,7 @@ def upsample_spectra(df, wavelengths, new_wavelengths, method):
     if method == 'combined':
       # First part of spectra with spline, second with pchip
       df.insert(0, '400', df.apply(lambda row: row.min(), axis=1)) # Bound the values for the start of the spectra
-      spline_cols = ['400', 'B01','B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09']
+      spline_cols = ['400', 'B01','B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A']
       f = interp1d([400] + wavelengths[:-2], df[spline_cols].values, kind='cubic', fill_value="extrapolate")
       interpolated_values_spline = f(new_wavelengths[:865-400])
       interpolated_df_spline = pd.DataFrame(interpolated_values_spline, columns=new_wavelengths[:865-400], index=df[spline_cols].index)
@@ -454,7 +454,7 @@ def resample_df(df_sampled, s2a, s2b, new_wavelengths, method):
 
   for df in df_list:
     if len(df):
-      s2_vals = df[['B01','B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09', 'B11', 'B12']]
+      s2_vals = df[['B01','B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']]
 
       # Resample to 1nm
       if np.unique(df.sensor) == 'Sentinel-2A':
@@ -475,8 +475,8 @@ if __name__ == '__main__':
     date_start = '2017-03-01'
     date_end = '2023-12-31'
 
-    s2a = [442.7, 492.4, 559.8, 664.6, 704.1, 740.5, 782.8, 832.8, 864.7, 945.1, 1613.7, 2202.4]
-    s2b = [442.2, 492.1, 559.0, 664.9, 703.8, 739.1, 779.7, 832.9, 864.0, 943.2, 1610.4, 2185.7]
+    s2a = [442.7, 492.4, 559.8, 664.6, 704.1, 740.5, 782.8, 832.8, 864.7,  1613.7, 2202.4]
+    s2b = [442.2, 492.1, 559.0, 664.9, 703.8, 739.1, 779.7, 832.9, 864.0, 1610.4, 2185.7]
     new_wavelengths = np.arange(400, 2501, 1)
 
     soil_spectra = pd.DataFrame()
