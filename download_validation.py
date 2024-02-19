@@ -30,7 +30,9 @@ import pandas as pd
 from scipy.spatial import cKDTree
 from shapely.geometry import Point, box
 from geopy.distance import geodesic
-from pyproj import Proj, transform
+from pyproj import Proj
+import pyproj
+from shapely.ops import transform
 import pickle
 
 
@@ -192,18 +194,16 @@ if __name__ == '__main__':
     gdf_loc = gdf[gdf.location==loc]
 
     for d in gdf_loc['date']:
-        print('date', d)
         try:
             s2_data = extract_s2_data(
                 aoi=gdf_loc.dissolve(),
-                time_start=pd.to_datetime(d) - timedelta(days=1), 
+                time_start=pd.to_datetime(d), # - timedelta(days=1), 
                 time_end=pd.to_datetime(d) + timedelta(days=1)
             )
         except:
             pass
         
         if s2_data.data is not None:
-            print('Not null')
             for scene_id, scene in s2_data.data:
                 """
                 pixs = scene.to_dataframe()
@@ -235,20 +235,24 @@ if __name__ == '__main__':
                     res = 1 # meter
                     # Create a box with 1m side centered around pt
                     bbox = box(pt.x - res/2, pt.y - res/2, pt.x + res/2, pt.y + res/2)
+                    projector = pyproj.Transformer.from_crs('EPSG:32632', 'EPSG:4326', always_xy=True).transform
+                    bbox = transform(projector, bbox)  
                     try:
                         # Clip bands to bbox
-                        scene.clip_bands(clipping_bounds=bbox, inplace=True)
+                        scene = scene.clip_bands(clipping_bounds=bbox)
                         pixs = scene.to_dataframe()
                         if len(pixs==1):
-                            df_data = pd.DataFrame([row[['date', 'lai', 'location', 'geometry']]])
-                            val_df = pd.concat([val_df, df_data], axis=1)
+                            df_data = pd.DataFrame([row[['date', 'lai', 'location', 'geometry']]]).reset_index(drop=True)
+                            df_data = pd.concat([pixs[['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']], df_data], axis=1)
+                            val_df = pd.concat([val_df, df_data], axis=0, ignore_index=True)
                         else:
                             print(f'Found multiple pixels {len(pixs)}')
                     except:
                         pass
+    
 
 
   # Save in-situ val data
-  data_path = base_dir.joinpath(f'results/validation_data2.pkl')
+  data_path = base_dir.joinpath(f'results/validation_data3.pkl')
   with open(data_path, 'wb+') as dst:
       pickle.dump(val_df, dst)
