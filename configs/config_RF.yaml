@@ -6,7 +6,7 @@ Model:
     random_state: 42
     k_folds : 4
     save: True
-    save_path: 'trained_models/RF_nsooil_test.pkl'
+    save_path: 'trained_models/RF_soil_test.pkl'
 
 Seed: 42
 
