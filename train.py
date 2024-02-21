@@ -65,7 +65,7 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     dfs = [pd.read_pickle(path) for path in data_path]
     concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
     # Sample 50000 data pairs
-    sampled_df = concatenated_df.sample(50000, random_state=config['Seed'])
+    sampled_df = concatenated_df.sample(50000, random_state=config['Seed']) if len(concatenated_df) > 50000 else concatenated_df
     X = sampled_df[config['Data']['train_cols']] #  concatenated_df[config['Data']['train_cols']]
     y = sampled_df[config['Data']['target_col']] #  concatenated_df[config['Data']['target_col']]
     X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
