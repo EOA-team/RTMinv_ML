@@ -29,6 +29,7 @@ from eodal.core.sensors.sentinel2 import Sentinel2
 from eodal.mapper.feature import Feature
 from eodal.mapper.filter import Filter
 from eodal.mapper.mapper import Mapper, MapperConfigs
+from eodal.utils.reprojection import infer_utm_zone
 
 Settings = get_settings()
 # set to False to use a local data archive
@@ -130,6 +131,7 @@ def extract_s2_data(
         'scene_modifier_kwargs': {'target_resolution': spatial_resolution
         }   # here, you have to specify the value of the arguments the `scene_modifier` requires
     }
+
     mapper.load_scenes(scene_kwargs=scene_kwargs)
 
     # loop over available Sentinel-2 scenes stored in mapper.data as a EOdal SceneCollection and check
@@ -317,7 +319,7 @@ def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_sc
     cluster_pixs = pixs_df[pixs_df['cluster'] == cluster_id]
     if not cluster_pixs.empty:
       # Sample one pixel from this cluster
-      sampled_rows = cluster_pixs.sample(samples_per_cluster)
+      sampled_rows = cluster_pixs.sample(samples_per_cluster) if samples_per_cluster<=len(cluster_pixs) else cluster_pixs
       samples.extend(sampled_rows.to_dict(orient='records'))
 
   # Convert GeoDataFrames to DataFrames before creating the final DataFrame
@@ -473,7 +475,7 @@ if __name__ == '__main__':
     # Set up parameters
     locations = ['Strickhof.shp', 'SwissFutureFarm.shp', 'Witzwil.shp']
     date_start = '2017-03-01'
-    date_end = '2023-12-31'
+    date_end = '2021-12-31' #'2023-12-31'
 
     s2a = [442.7, 492.4, 559.8, 664.6, 704.1, 740.5, 782.8, 832.8, 864.7,  1613.7, 2202.4]
     s2b = [442.2, 492.1, 559.0, 664.9, 703.8, 739.1, 779.7, 832.9, 864.0, 1610.4, 2185.7]
@@ -488,32 +490,34 @@ if __name__ == '__main__':
         # Setup parameters
         shp_path = base_dir.joinpath(f'data/{loc}')
         path_suffix = loc.split('.')[0]
-        save_path = base_dir.joinpath(f'results/eodal_baresoil_s2_data_{path_suffix}.pkl')
+        save_path = base_dir.joinpath(f'results/eodal_baresoil_s2_data_{path_suffix}_2020.pkl')
         metadata_path = save_path.with_name(save_path.name.replace('data', 'metadata'))
         upsample_method = 'pchip'
 
-        # Add buffer to remove field edges
-        aoi = gpd.read_file(shp_path).dissolve()
-        aoi = aoi.to_crs('EPSG:2056')
-        aoi_with_buffer = aoi.copy()
-        buffer_distance = -60 # in meters
-        aoi_with_buffer['geometry'] = aoi.buffer(buffer_distance)
-
-        # Take extra surrounding fields using GeoWP
-        geowp_path = '/home/f80873755@agsad.admin.ch/mnt/Data-Work-RE/27_Natural_Resources-RE/99_GIS_User_protected/GeoWP/Landuse/Landw_Kulturflaechen/2021/01_Geodata/SHP/Nutzungsflaechen_BLW_Schweizweit_merge/ln_nutzung_BLW_2021_CH.shp'
-        geowp = gpd.read_file(geowp_path).to_crs(aoi.crs)
-        geowp = geowp.cx[aoi.total_bounds[0]:aoi.total_bounds[2], aoi.total_bounds[1]:aoi.total_bounds[3]]
-        geowp_with_buffer = geowp.copy()
-        buffer_distance = -60 # in meters, if the crs of the gdf is metric
-        geowp_with_buffer['geometry'] = geowp.buffer(buffer_distance)
-        geom = gpd.overlay(aoi_with_buffer.to_crs(geowp_with_buffer.crs), geowp_with_buffer, how='union')
 
         # Get data if not done yet
         if not save_path.exists() or not metadata_path.exists():
+
+            # Add buffer to remove field edges
+            aoi = gpd.read_file(shp_path).dissolve()
+            aoi = aoi.to_crs('EPSG:2056')
+            aoi_with_buffer = aoi.copy()
+            buffer_distance = -60 # in meters
+            aoi_with_buffer['geometry'] = aoi.buffer(buffer_distance)
+
+            # Take extra surrounding fields using GeoWP
+            geowp_path = '/home/f80873755@agsad.admin.ch/mnt/Data-Work-RE/27_Natural_Resources-RE/99_GIS_User_protected/GeoWP/Landuse/Landw_Kulturflaechen/2021/01_Geodata/SHP/Nutzungsflaechen_BLW_Schweizweit_merge/ln_nutzung_BLW_2021_CH.shp'
+            geowp = gpd.read_file(geowp_path).to_crs(aoi.crs)
+            geowp = geowp.cx[aoi.total_bounds[0]:aoi.total_bounds[2], aoi.total_bounds[1]:aoi.total_bounds[3]]
+            geowp_with_buffer = geowp.copy()
+            buffer_distance = -60 # in meters, if the crs of the gdf is metric
+            geowp_with_buffer['geometry'] = geowp.buffer(buffer_distance)
+            geom = gpd.overlay(aoi_with_buffer.to_crs(geowp_with_buffer.crs), geowp_with_buffer, how='union')
+            
             res_baresoil = extract_s2_data(
-            aoi=geom,
-            time_start=datetime.strptime(date_start, '%Y-%m-%d'),
-            time_end=datetime.strptime(date_end, '%Y-%m-%d')
+                aoi=geom.to_crs(4326), 
+                time_start=datetime.strptime(date_start, '%Y-%m-%d'),
+                time_end=datetime.strptime(date_end, '%Y-%m-%d')
             )
 
             # Save data for future use
@@ -532,13 +536,13 @@ if __name__ == '__main__':
 
         # Sample pixels: 5 pixs per date, for top3 dates with most bare pixels
         df_sampled = sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_scenes=6, samples_per_cluster=5)
-        sampled_path = base_dir.joinpath(f'results/sampled_pixels_{path_suffix}.pkl')
+        sampled_path = base_dir.joinpath(f'results/sampled_pixels_{path_suffix}2021.pkl')
         with open(sampled_path, 'wb+') as dst:
             pickle.dump(df_sampled, dst)
 
         # Resample to 1nm 
         spectra = resample_df(df_sampled, s2a, s2b, new_wavelengths, upsample_method)
-        spectra_path = base_dir.joinpath(f'results/sampled_spectra_{path_suffix}.pkl')
+        spectra_path = base_dir.joinpath(f'results/sampled_spectra_{path_suffix}2021.pkl')
         with open(spectra_path, 'wb+') as dst:
             pickle.dump(spectra, dst)
 
@@ -547,7 +551,7 @@ if __name__ == '__main__':
     
 
     print('Saving all samples...')
-    spectra_path = base_dir.joinpath(f'results/sampled_spectra_all.pkl')
+    spectra_path = base_dir.joinpath(f'results/sampled_spectra_all2021.pkl')
     with open(spectra_path, 'wb+') as dst:
         pickle.dump(soil_spectra, dst)
     print('Finished.')
