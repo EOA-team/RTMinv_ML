@@ -15,6 +15,8 @@ from sklearn.metrics import silhouette_score
 from scipy.interpolate import interp1d, pchip_interpolate
 import matplotlib.pyplot as plt
 import time
+import glob
+import contextily as ctx
 
 import os
 from pathlib import Path
@@ -307,29 +309,34 @@ def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_sc
       pixs['sensing_date'] = [date]*len(pixs)
       pixs['sensor'] = [sensor]*len(pixs)
       pixs_df = pd.concat([pixs_df, pixs])
-  
-  # Apply k-means clustering on the pixel dataset
-  optimal_clusters = find_optimal_clusters(pixs_df[bands], max_clusters=10)
-  num_clusters = min(optimal_clusters, len(pixs_df))
-  print(f'Sampling from {num_clusters} clusters')
-  if len(pixs_df)<=num_clusters:
-    print('Warning: all pixels will be sampled as ther are not enough samples for k-means clustering')
-  kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init='auto')
-  pixs_df['cluster'] = kmeans.fit_predict(pixs_df[bands])
 
-  # Sample one pixel from each cluster
-  samples = []
-  for cluster_id in range(num_clusters):
-    cluster_pixs = pixs_df[pixs_df['cluster'] == cluster_id]
-    if not cluster_pixs.empty:
-      # Sample one pixel from this cluster
-      sampled_rows = cluster_pixs.sample(samples_per_cluster) if samples_per_cluster<=len(cluster_pixs) else cluster_pixs
-      samples.extend(sampled_rows.to_dict(orient='records'))
 
-  # Convert GeoDataFrames to DataFrames before creating the final DataFrame
-  df_sampled = pd.DataFrame(samples)
+  if len(pixs_df):
+    # Apply k-means clustering on the pixel dataset
+    optimal_clusters = find_optimal_clusters(pixs_df[bands], max_clusters=10)
+    num_clusters = min(optimal_clusters, len(pixs_df))
+    print(f'Sampling from {num_clusters} clusters')
+    if len(pixs_df)<=num_clusters:
+        print('Warning: all pixels will be sampled as ther are not enough samples for k-means clustering')
+    kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init='auto')
+    pixs_df['cluster'] = kmeans.fit_predict(pixs_df[bands])
 
-  return df_sampled
+    # Sample one pixel from each cluster
+    samples = []
+    for cluster_id in range(num_clusters):
+        cluster_pixs = pixs_df[pixs_df['cluster'] == cluster_id]
+        if not cluster_pixs.empty:
+            # Sample one pixel from this cluster
+            sampled_rows = cluster_pixs.sample(samples_per_cluster) if samples_per_cluster<=len(cluster_pixs) else cluster_pixs
+            samples.extend(sampled_rows.to_dict(orient='records'))
+
+    # Convert GeoDataFrames to DataFrames before creating the final DataFrame
+    df_sampled = pd.DataFrame(samples)
+    return df_sampled
+
+  else:
+    print('No bare pixels left to sample.')
+    return pd.DataFrame()
 
 
 def sample_bare_pixels_perdate(scoll, metadata, lower_threshold, upper_threshold, num_scenees):
@@ -474,13 +481,39 @@ def resample_df(df_sampled, s2a, s2b, new_wavelengths, method):
   return spectra
 
 
+def load_scolls(streams: list):
+    """
+    Load SceneCollection from pickled binary stream.
+
+    :param streams:
+        list of pickled binary stream to load into a SceneCollection or
+        file-path to pickled binary on disk.
+    :returns:
+        `SceneCollection` instance.
+    """
+    # open empty scene collection
+    scoll_out = SceneCollection()
+
+    for stream in streams:
+        if isinstance(stream, Path):
+            with open(stream, "rb") as f:
+                reloaded = pickle.load(f)
+        elif isinstance(stream, str):
+            with open(stream, "rb") as f:
+                reloaded = pickle.load(f)
+        elif isinstance(stream, bytes):
+            reloaded = pickle.loads(stream)
+        else:
+            raise TypeError(f"{type(stream)} is not a supported data type")
+      
+        # add scenes one by one
+        for _, scene in reloaded["collection"].items():
+            scoll_out.add_scene(scene)
+
+    return scoll_out
+
+
 if __name__ == '__main__':
-
-    start_time = time.time()
-
-    # Set up parameters
-    date_start = '2020-06-01'
-    date_end = '2020-06-05' 
 
     s2a = [442.7, 492.4, 559.8, 664.6, 704.1, 740.5, 782.8, 832.8, 864.7,  1613.7, 2202.4]
     s2b = [442.2, 492.1, 559.0, 664.9, 703.8, 739.1, 779.7, 832.9, 864.0, 1610.4, 2185.7]
@@ -488,88 +521,122 @@ if __name__ == '__main__':
 
     soil_spectra = pd.DataFrame()
 
-    tiles = {'32TMT': [(7.66286529045287, 47.845914826827),(7.68758850048273, 46.8581759574933),(9.12805716115049, 46.8656282472998),(9.1304703619161, 47.8536277114283)],
-            '32TLT':[(6.32792675947954,47.8225951267953),(6.37728036218156, 46.8356437136561),(7.81664846692137, 46.8595830833696),(7.79435498889756, 47.8473711518664),(6.32792675947954, 47.8225951267953)],
+    tiles = {'32TMT': [(7.66286529045287, 47.845914826827),(7.68758850048273, 46.8581759574933),(9.12805716115049, 46.8656282472998),(9.1304703619161, 47.8536277114283),(7.66286529045287, 47.845914826827)],
+            '32TLT': [(6.32792675947954,47.8225951267953),(6.37728036218156, 46.8356437136561),(7.81664846692137, 46.8595830833696),(7.79435498889756, 47.8473711518664),(6.32792675947954, 47.8225951267953)],
             '32TNT': [(8.9997326423426, 47.8537018420053),(8.99973758744939,46.8656998728757),(10.4401498244026, 46.8566398814282),(10.4672773767603, 47.8443250460311),(8.9997326423426, 47.8537018420053)],
             '32TNS': [(8.99973715756222,46.9537091787344),(8.9997418700468, 45.9655511480415),(10.4166561015996, 45.9567698586004),(10.442508097938, 46.9446214409232),(8.99973715756222, 46.9537091787344)],
             '32TMS': [(7.68543924709582, 46.9461622205863),(7.7089998702566, 45.9582586884214),(9.12596726307512, 45.9654817261501),(9.12826694512377, 46.9536373337673),(7.68543924709582, 46.9461622205863)],
             '32TLS': [(6.37298980762373, 46.9235610080068),(6.42002507864337, 45.9364192287437),(7.83595551698163, 45.9596225320207),(7.81471043979331, 46.94757365544),(6.37298980762373, 46.9235610080068)],
-            '31TGM': [(5.62648535526562, 46.9235730577955),(5.57945945554239, 45.9364308725672),(6.99300216652316, 45.8957352511058),(7.06565713267192, 46.8814596607493),(5.62648535526562, 46.9235730577955)]}
+            '31TGM': [(5.62648535526562, 46.9235730577955),(5.57945945554239, 45.9364308725672),(6.99300216652316, 45.8957352511058),(7.06565713267192, 46.8814596607493),(5.62648535526562, 46.9235730577955)],
+            '31TGN': [(5.67153942638492, 47.8226075594756),(5.62219565549863, 46.8356557266896),(7.05902986502132, 46.793670687313),(7.13525847525188, 47.7791570713891),(5.67153942638492, 47.8226075594756)]}
     
-    for tile_id, tile_coords in tiles.items():
+    year_list = [2017, 2018, 2019, 2020, 2021, 2022, 2023]
 
+    upsample_method = 'pchip'
+
+    for tile_id, tile_coords in tiles.items():
         print(f'Sampling bare soil from tile {tile_id}...')
 
-        # Setup parameters
-        save_path = base_dir.joinpath(f'results/eodal_baresoil_s2_data_CH.pkl')
-        metadata_path = save_path.with_name(save_path.name.replace('data', 'metadata'))
-        upsample_method = 'pchip'
+        # TO DO: could check if tile needs to be processed and skip cropping geom in necessary
+        # Prepare geometry
+        tile = Polygon(tile_coords)
+        tile_gdf = gpd.GeoDataFrame(geometry=[tile], crs='EPSG:4326')
 
+        # Take extra surrounding fields using GeoWP
+        geowp_path = '/home/f80873755@agsad.admin.ch/mnt/Data-Work-RE/27_Natural_Resources-RE/99_GIS_User_protected/GeoWP/Landuse/Landw_Kulturflaechen/2021/01_Geodata/SHP/Nutzungsflaechen_BLW_Schweizweit_merge/ln_nutzung_BLW_2021_CH.shp'
+        geowp = gpd.read_file(geowp_path).to_crs(4326)
+        geowp = geowp.cx[tile_gdf.total_bounds[0]:tile_gdf.total_bounds[2], tile_gdf.total_bounds[1]:tile_gdf.total_bounds[3]]
+        geowp_with_buffer = geowp.copy()
+        buffer_distance = -60 # in meters, if the crs of the gdf is metric
+        geowp_with_buffer['geometry'] = geowp.to_crs(2056).buffer(buffer_distance)
+        geom = gpd.overlay(tile_gdf.to_crs(geowp_with_buffer.crs), geowp_with_buffer, how='intersection')
 
-        # Get data if not done yet
-        if not save_path.exists() or not metadata_path.exists():
+        """
+        # Plot the geometry and save image
+        fig, ax = plt.subplots(figsize=(10, 8))
+        geom.to_crs('EPSG:4326').plot(ax=ax, color='r')
+        bounds = tile_gdf.total_bounds
+        ax.set_xlim((bounds[0]-0.02, bounds[2]+0.02))
+        ax.set_ylim((bounds[1]-0.01, bounds[3]+0.01))
+        ctx.add_basemap(ax=ax, crs='EPSG:4326')
+        plt.savefig(base_dir.joinpath(f'results/geom_{tile_id}.png'))
+        plt.close()          
+        """
 
-            # Tile geometry
-            tile = Polygon(tile_coords)
-            tile_gdf = gpd.GeoDataFrame(geometry=[tile], crs='EPSG:4326')
+        for k in range(len(year_list)):
+            YEAR = year_list[k]
 
-            # Take extra surrounding fields using GeoWP
-            geowp_path = '/home/f80873755@agsad.admin.ch/mnt/Data-Work-RE/27_Natural_Resources-RE/99_GIS_User_protected/GeoWP/Landuse/Landw_Kulturflaechen/2021/01_Geodata/SHP/Nutzungsflaechen_BLW_Schweizweit_merge/ln_nutzung_BLW_2021_CH.shp'
-            geowp = gpd.read_file(geowp_path).to_crs(2056)
-            geowp = geowp.cx[tile_gdf.total_bounds[0]:tile_gdf.total_bounds[2], tile_gdf.total_bounds[1]:tile_gdf.total_bounds[3]]
-            geowp_with_buffer = geowp.copy()
-            buffer_distance = -60 # in meters, if the crs of the gdf is metric
-            geowp_with_buffer['geometry'] = geowp.buffer(buffer_distance)
-            geom = gpd.overlay(tile_gdf.to_crs(geowp_with_buffer.crs), geowp_with_buffer, how='intersection')
+            # Setup parameters
+            save_path = base_dir.joinpath(f'results/eodal_baresoil_s2_data_{tile_id}_{str(YEAR)}.pkl')
+            metadata_path = save_path.with_name(save_path.name.replace('data', 'metadata'))
             
-            res_baresoil = extract_s2_data(
-                aoi=geom.to_crs(4326), 
-                time_start=datetime.strptime(date_start, '%Y-%m-%d'),
-                time_end=datetime.strptime(date_end, '%Y-%m-%d'),
-                tile=tile_id
-            )
+            date_start = datetime(YEAR,1,1)  	
+            date_end = datetime(YEAR,12,31)   
 
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            print(f"Elapsed time: {elapsed_time} seconds")
+            # Get data if not done yet
+            if not save_path.exists() or not metadata_path.exists():
+                print('Extracting data for year ' + str(YEAR))
 
-            """ 
-            # Save data for future use
-            with open(save_path, 'wb+') as dst:
-                dst.write(res_baresoil.data.to_pickle())     
-            with open(metadata_path, 'wb+') as dst:
-                pickle.dump(res_baresoil.metadata, dst)
-        
+                res_baresoil = extract_s2_data(
+                    aoi=geom.to_crs(4326).dissolve(), 
+                    time_start=date_start,
+                    time_end=date_end,
+                    tile=tile_id
+                )
 
-        # Load data    
-        scoll = SceneCollection.from_pickle(stream=save_path)
-        metadata = pd.read_pickle(metadata_path)
+                if len(res_baresoil.metadata):
+                    # Save data for future use
+                    with open(save_path, 'wb+') as dst:
+                        dst.write(res_baresoil.data.to_pickle())     
+                    with open(metadata_path, 'wb+') as dst:
+                        pickle.dump(res_baresoil.metadata, dst)
+                else:
+                    print(f'No data for tile {tile_id} in {YEAR}. Skipping...')
+                    continue
+            
+            
+        # Load data: all scene collections and metadata for a given tile
+        scoll_pattern = f'results/eodal_baresoil_s2_data_{tile_id}_*.pkl'
+        scoll_files = glob.glob(str(base_dir.joinpath(scoll_pattern)))
+        scoll_files = [f for f in scoll_files] # need to order the filenames?
+        meta_pattern = f'results/eodal_baresoil_s2_metadata_{tile_id}_*.pkl'
+        meta_files = glob.glob(str(base_dir.joinpath(meta_pattern)))
+        meta_files = [f for f in meta_files] # need to order the filenames?
+        print(meta_files)
+    
+        scoll = load_scolls(streams=scoll_files)
+        dfs = []
+        for file_path in meta_files:
+            df = pd.read_pickle(file_path)
+            dfs.append(df)
+        metadata = pd.concat(dfs, ignore_index=True)
+
 
         # Compute band percentile thresholds in scene collection (for filtering)
         lower_threshold, upper_threshold = compute_scoll_percentiles(scoll)
 
-        # Sample pixels: 5 pixs per date, for top3 dates with most bare pixels
+        # Sample pixels: 5 pixs per date, for top 6 dates with most bare pixels
         df_sampled = sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_scenes=6, samples_per_cluster=5)
-        sampled_path = base_dir.joinpath(f'results/sampled_pixels_{path_suffix}2021.pkl')
-        with open(sampled_path, 'wb+') as dst:
-            pickle.dump(df_sampled, dst)
+        if len(df_sampled):
+            sampled_path = base_dir.joinpath(f'results/sampled_pixels_{tile_id}.pkl')
+            with open(sampled_path, 'wb+') as dst:
+                pickle.dump(df_sampled, dst)
 
-        # Resample to 1nm 
-        spectra = resample_df(df_sampled, s2a, s2b, new_wavelengths, upsample_method)
-        spectra_path = base_dir.joinpath(f'results/sampled_spectra_{path_suffix}2021.pkl')
-        with open(spectra_path, 'wb+') as dst:
-            pickle.dump(spectra, dst)
+            # Resample to 1nm 
+            spectra = resample_df(df_sampled, s2a, s2b, new_wavelengths, upsample_method)
+            spectra_path = base_dir.joinpath(f'results/sampled_spectra_{tile_id}.pkl')
+            with open(spectra_path, 'wb+') as dst:
+                pickle.dump(spectra, dst)
 
-        soil_spectra = pd.concat([soil_spectra, spectra])
-        print('Done.')
-    
+            soil_spectra = pd.concat([soil_spectra, spectra])
 
-    print('Saving all samples...')
-    spectra_path = base_dir.joinpath(f'results/sampled_spectra_all2021.pkl')
+
+    print(f'Saving all samples for tile {tile_id}...')
+    spectra_path = base_dir.joinpath(f'results/sampled_spectra_all_CH.pkl')
     with open(spectra_path, 'wb+') as dst:
         pickle.dump(soil_spectra, dst)
     print('Finished.')
-    """
+
 
     
 
