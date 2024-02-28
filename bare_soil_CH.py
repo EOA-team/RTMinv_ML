@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import time
 import glob
 import contextily as ctx
+import calendar
 
 import os
 from pathlib import Path
@@ -521,10 +522,10 @@ if __name__ == '__main__':
 
     soil_spectra = pd.DataFrame()
 
-    tiles = {'32TMT': [(7.66286529045287, 47.845914826827),(7.68758850048273, 46.8581759574933),(9.12805716115049, 46.8656282472998),(9.1304703619161, 47.8536277114283),(7.66286529045287, 47.845914826827)],
-            '32TLT': [(6.32792675947954,47.8225951267953),(6.37728036218156, 46.8356437136561),(7.81664846692137, 46.8595830833696),(7.79435498889756, 47.8473711518664),(6.32792675947954, 47.8225951267953)],
-            '32TNT': [(8.9997326423426, 47.8537018420053),(8.99973758744939,46.8656998728757),(10.4401498244026, 46.8566398814282),(10.4672773767603, 47.8443250460311),(8.9997326423426, 47.8537018420053)],
-            '32TNS': [(8.99973715756222,46.9537091787344),(8.9997418700468, 45.9655511480415),(10.4166561015996, 45.9567698586004),(10.442508097938, 46.9446214409232),(8.99973715756222, 46.9537091787344)],
+    tiles = {#'32TMT': [(7.66286529045287, 47.845914826827),(7.68758850048273, 46.8581759574933),(9.12805716115049, 46.8656282472998),(9.1304703619161, 47.8536277114283),(7.66286529045287, 47.845914826827)],
+            #'32TLT': [(6.32792675947954,47.8225951267953),(6.37728036218156, 46.8356437136561),(7.81664846692137, 46.8595830833696),(7.79435498889756, 47.8473711518664),(6.32792675947954, 47.8225951267953)],
+            #'32TNT': [(8.9997326423426, 47.8537018420053),(8.99973758744939,46.8656998728757),(10.4401498244026, 46.8566398814282),(10.4672773767603, 47.8443250460311),(8.9997326423426, 47.8537018420053)],
+            #'32TNS': [(8.99973715756222,46.9537091787344),(8.9997418700468, 45.9655511480415),(10.4166561015996, 45.9567698586004),(10.442508097938, 46.9446214409232),(8.99973715756222, 46.9537091787344)],
             '32TMS': [(7.68543924709582, 46.9461622205863),(7.7089998702566, 45.9582586884214),(9.12596726307512, 45.9654817261501),(9.12826694512377, 46.9536373337673),(7.68543924709582, 46.9461622205863)],
             '32TLS': [(6.37298980762373, 46.9235610080068),(6.42002507864337, 45.9364192287437),(7.83595551698163, 45.9596225320207),(7.81471043979331, 46.94757365544),(6.37298980762373, 46.9235610080068)],
             '31TGM': [(5.62648535526562, 46.9235730577955),(5.57945945554239, 45.9364308725672),(6.99300216652316, 45.8957352511058),(7.06565713267192, 46.8814596607493),(5.62648535526562, 46.9235730577955)],
@@ -563,36 +564,37 @@ if __name__ == '__main__':
         plt.close()          
         """
 
-        for k in range(len(year_list)):
-            YEAR = year_list[k]
+        for YEAR in year_list:
+            for MONTH in range(1, 13):  # Months range from 1 to 12
+                # Determine the last day of the month
+                last_day = calendar.monthrange(YEAR, MONTH)[1]
+                date_start = datetime(YEAR, MONTH, 1)
+                date_end = datetime(YEAR, MONTH, last_day) # Includes last date
 
-            # Setup parameters
-            save_path = base_dir.joinpath(f'results/eodal_baresoil_s2_data_{tile_id}_{str(YEAR)}.pkl')
-            metadata_path = save_path.with_name(save_path.name.replace('data', 'metadata'))
+                # Setup parameters
+                save_path = base_dir.joinpath(f'results/eodal_baresoil_s2_data_{tile_id}_{YEAR}_{MONTH}.pkl')
+                metadata_path = save_path.with_name(save_path.name.replace('data', 'metadata'))
             
-            date_start = datetime(YEAR,1,1)  	
-            date_end = datetime(YEAR,12,31)   
+                # Get data if not done yet
+                if not save_path.exists() or not metadata_path.exists():
+                    print('Extracting data for year ' + str(YEAR) + '-' +str(MONTH))
 
-            # Get data if not done yet
-            if not save_path.exists() or not metadata_path.exists():
-                print('Extracting data for year ' + str(YEAR))
+                    res_baresoil = extract_s2_data(
+                        aoi=geom.to_crs(4326).dissolve(), 
+                        time_start=date_start,
+                        time_end=date_end,
+                        tile=tile_id
+                    )
 
-                res_baresoil = extract_s2_data(
-                    aoi=geom.to_crs(4326).dissolve(), 
-                    time_start=date_start,
-                    time_end=date_end,
-                    tile=tile_id
-                )
-
-                if len(res_baresoil.metadata):
-                    # Save data for future use
-                    with open(save_path, 'wb+') as dst:
-                        dst.write(res_baresoil.data.to_pickle())     
-                    with open(metadata_path, 'wb+') as dst:
-                        pickle.dump(res_baresoil.metadata, dst)
-                else:
-                    print(f'No data for tile {tile_id} in {YEAR}. Skipping...')
-                    continue
+                    if len(res_baresoil.metadata):
+                        # Save data for future use
+                        with open(save_path, 'wb+') as dst:
+                            dst.write(res_baresoil.data.to_pickle())     
+                        with open(metadata_path, 'wb+') as dst:
+                            pickle.dump(res_baresoil.metadata, dst)
+                    else:
+                        print(f'No data for tile {tile_id} in {YEAR}-{MONTH}. Skipping...')
+                        continue
             
             
         # Load data: all scene collections and metadata for a given tile
@@ -610,13 +612,14 @@ if __name__ == '__main__':
             df = pd.read_pickle(file_path)
             dfs.append(df)
         metadata = pd.concat(dfs, ignore_index=True)
+        print(len(metadata))
 
 
         # Compute band percentile thresholds in scene collection (for filtering)
         lower_threshold, upper_threshold = compute_scoll_percentiles(scoll)
 
         # Sample pixels: 5 pixs per date, for top 6 dates with most bare pixels
-        df_sampled = sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_scenes=6, samples_per_cluster=5)
+        df_sampled = sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_scenes=12, samples_per_cluster=5)
         if len(df_sampled):
             sampled_path = base_dir.joinpath(f'results/sampled_pixels_{tile_id}.pkl')
             with open(sampled_path, 'wb+') as dst:
