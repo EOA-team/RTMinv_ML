@@ -40,189 +40,41 @@ Settings = get_settings()
 Settings.USE_STAC = True
 
 
-def preprocess_sentinel2_scenes(
-    ds: Sentinel2,
-    target_resolution: int,
-    ) -> Sentinel2:
-    """
-    Resample Sentinel-2 scenes and mask clouds, shadows, and snow
-    based on the Scene Classification Layer (SCL).
-
-    NOTE:
-        Depending on your needs, the pre-processing function can be
-        fully customized using the full power of EOdal and its
-    interfacing libraries!
-
-    :param target_resolution:
-        spatial target resolution to resample all bands to.
-    :returns:
-        resampled, cloud-masked Sentinel-2 scene.
-    """
-    # resample scene
-    ds.resample(inplace=True, target_resolution=target_resolution)
-    # mask clouds, shadows, and snow
-    ds.mask_clouds_and_shadows(inplace=True, cloud_classes=[3, 8, 9, 10, 11])
-    return ds
-
-
-def extract_s2_data(
-        aoi: gpd.GeoDataFrame,
-        time_start: datetime,
-        time_end: datetime,
-        scene_cloud_cover_threshold: float = 50,
-        feature_cloud_cover_threshold: float = 80,
-        spatial_resolution: int = 10,
-        tile: str = ''
-    ) -> SceneCollection:
-    """
-    Extracts Sentinel-2 data from the STAC SAT archive for a given area and time period.
-    Scenes that are too cloudy or contain nodata (blackfill), only, are discarded.
-    Keep only bare soil pixels
-
-    The processing level of the Sentinel-2 data is L2A (surface reflectance factors).
-
-    :param parcel:
-        field parcel geometry (defines the spatial extent to extract)
-    :param time_start:
-        start of the time period to extract
-    :param end_time:
-        end of the time period to extract
-    :param scene_cloud_cover_threshold:
-        scene-wide cloudy pixel percentage (from Sentinel-2 metadata) to filter out scenes
-        with too high cloud coverage values [0-100%]
-    :param feature_cloud_cover_threshold:
-        cloudy pixel percentage [0-100%] on the parcel level. Only if the parcel has a
-        lower percentual share of cloudy pixels (based on the scene classification layer) than
-        the threshold specified, the Sentinel-2 observation is kept
-    :param spatial_resolution:
-        spatial resolution of the Sentinel-2 data in meters (Def: 10m)
-    :param resampling_method:
-        spatial resampling method for those Sentinel-2 bands not available in the target
-        resolution. Nearest Neighbor by default
-    :param tile: Sentinel-2 tile name, to download data only from one tile
-    :returns:
-        dictionary with the list of scenes for the field parcel (`feature_scenes`), the
-        DataFrame of (un)used scenes and the reason for not using plus some basic scene
-        metadata (`scene_properties`)
-    """
-    # setup the metadata filters (cloud cover and processing level)
-    metadata_filters = [
-        Filter('cloudy_pixel_percentage','<', scene_cloud_cover_threshold),
-        Filter('processing_level', '==', 'Level-2A'),
-        Filter('tile_id', '==', tile)
-    ]
-    # setup the spatial feature for extracting data
-    feature = Feature.from_geoseries(aoi.geometry)
+def load_raster_gdf(tif_path: Path):
+    """Load raster data into a GeoDataFrame.
     
-    # set up mapping configs
-    mapper_configs = MapperConfigs(
-        collection='sentinel2-msi',
-        time_start=time_start,
-        time_end=time_end,
-        feature=feature,
-        metadata_filters=metadata_filters
-    )
+    :param tif_path: Path to the GeoTIFF raster file
+    """
 
-    # get a new mapper instance. Set sensor to `sentinel2`
-    mapper = Mapper(mapper_configs)
+    # Read the raster data using rasterio
+    with rasterio.open(tif_path) as src:
+        # Read raster data as a NumPy array
+        raster_array = src.read()  # Read all bands
 
-    # query the STAC (looks for available scenes in the selected spatio-temporal range)
-    mapper.query_scenes()
+        # Get the metadata for coordinate reference system (CRS) and transform
+        crs = src.crs.to_string()
 
-    # get observations (loads the actual Sentinel2 scenes)
-    # the data is extract for the extent of the parcel
-    scene_kwargs = {
-        'scene_constructor': Sentinel2.from_safe,            # this tells the mapper how to read and load the data (i.e., Sentinel-2 scenes)
-        'scene_constructor_kwargs': {'band_selection': ['B01','B02','B03', 'B04', 'B05', 'B06', 'B07', 'B08','B8A', 'B11', 'B12', 'SCL']}, # here you could specify which bands to read
-        'scene_modifier': preprocess_sentinel2_scenes,       # this tells the mapper about (optional) pre-processing of the loaded scenes (must be a callable)
-        'scene_modifier_kwargs': {'target_resolution': spatial_resolution
-        }   # here, you have to specify the value of the arguments the `scene_modifier` requires
-    }
+    # Create a grid of points representing each pixel
+    rows, cols = raster_array.shape[1:]
+    x_coords, y_coords = np.meshgrid(np.linspace(src.bounds.left, src.bounds.right, cols),
+                                    np.linspace(src.bounds.top, src.bounds.bottom, rows))
 
-    mapper.load_scenes(scene_kwargs=scene_kwargs)
+    # Flatten the coordinates
+    flat_x_coords = x_coords.flatten()
+    flat_y_coords = y_coords.flatten()
 
-    # loop over available Sentinel-2 scenes stored in mapper.data as a EOdal SceneCollection and check
-    # for no-data. These scenes will be removed from the SceneCollection
-    scenes_to_del = []
-    mapper.metadata['scene_used'] = 'yes'
+    # Create a GeoDataFrame with points
+    geometry = [Point(x, y) for x, y in zip(flat_x_coords, flat_y_coords)]
+    gdf = gpd.GeoDataFrame(geometry=geometry, crs=crs)
 
-    if mapper.data is not None:
-        for scene_id, scene in mapper.data:
+    # Add columns for each band value
+    col_names = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12', 'ndvi', 'nbr2']
+    for i, band_values in enumerate(raster_array):
+        gdf[f'{col_names[i]}'] = band_values.flatten()
 
-            # check if scene is blackfilled (nodata); if yes continue
-            if scene.is_blackfilled:
-                scenes_to_del.append(scene_id)
-                mapper.metadata.loc[mapper.metadata.sensing_time.dt.strftime('%Y-%m-%d %H:%M') == scene_id.strftime('%Y-%m-%d %H:%M')[0:16], 'scene_used'] = 'No [blackfill]'
-                continue
+    gdf.dropna(inplace=True)
 
-            # check cloud coverage (including shadows and snow) of the field parcel
-            feature_cloud_cover = scene.get_cloudy_pixel_percentage(cloud_classes=[3, 8, 9, 10, 11])
-
-            # if the scene is too cloudy, we skip it
-            if feature_cloud_cover > feature_cloud_cover_threshold:
-                scenes_to_del.append(scene_id)
-                mapper.metadata.loc[mapper.metadata.sensing_time.dt.strftime('%Y-%m-%d %H:%M') == scene_id.strftime('%Y-%m-%d %H:%M')[0:16], 'scene_used'] = 'No [clouds]'
-                continue
-
-            # calculate the NDVI and NBR2
-            scene.calc_si('NDVI', inplace=True)
-            scene.calc_si('NBR2', inplace=True)
-
-            # Check if there are any bare soil pixels
-            ndvi = scene.get_band('NDVI').values
-            nbr2 =  scene.get_band('NBR2').values
-            ndvi.fill_value = np.nan
-            nbr2.fill_value = np.nan
-            bare_condition = (0 < ndvi) & (ndvi <= 0.25) & (nbr2 <= 0.075)
-            bare_soil = np.ma.masked_array(ndvi.data, mask=~bare_condition)
-            if not np.sum(~bare_soil.mask): # all pixels are masked -> no bare soil
-                scenes_to_del.append(scene_id)
-            else:
-                #print(scene_id, np.sum(~bare_soil.mask))
-                scene.mask(bare_soil.mask, keep_mask_values=True, inplace=True)
-                # Save the number of bare soil pixels
-                mapper.metadata.loc[mapper.metadata['sensing_date'] == scene_id.date(), 'n_bare'] = np.sum(~bare_soil.mask)
-            
-                
-        # delete scenes too cloudy or containing only no-data or with no bare soil pixels
-        for scene_id in scenes_to_del:
-            del mapper.data[scene_id]
-        # Keep only metadata for corresponding scenes
-        dates_to_del = [scene_id.date() for scene_id in scenes_to_del]
-        mapper.metadata = mapper.metadata[~mapper.metadata['sensing_date'].isin(dates_to_del)]
-    
-    return mapper
-
-
-def compute_scoll_percentiles(scoll):
-  ''' 
-  Find the 1st and 99th percentile for each band in the scene collection
-
-  :params scoll: EOdal scene collection object
-  '''
-  lower_threshold = {}
-  upper_threshold = {}
-  bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']
-
-  for scene_id, scene in scoll:
-    df_scene = scene.to_dataframe()
-    # Compute 1st and 99th percentiles for each band across whole scoll
-    for band in bands:
-        if band not in lower_threshold:
-            lower_threshold.update({band: float('inf')})  # Initialize to positive infinity
-        if band not in upper_threshold:
-            upper_threshold.update({band: float('-inf')})  # Initialize to negative infinity
-
-        band_values = df_scene[band].dropna().values  # Drop NaN values for the band
-        if len(band_values) > 0:
-            band_lower = np.percentile(band_values, 1)
-            band_upper = np.percentile(band_values, 99)
-
-            # Update lower_threshold and upper_threshold for each band
-            lower_threshold[band] = min(lower_threshold[band], band_lower)
-            upper_threshold[band] = max(upper_threshold[band], band_upper)
-
-  return lower_threshold, upper_threshold
+    return gdf
 
 
 def filter_dataframe(df, lower_threshold, upper_threshold, bands):
@@ -273,15 +125,12 @@ def find_optimal_clusters(data, max_clusters=10):
     return optimal_clusters
 
 
-def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_scenes, samples_per_cluster):
+def sample_bare_pixels(gdf, num_scenes, samples_per_cluster):
   '''
   Use the top num_scenes scenes where there were the most number of bare pixels (clearest days with bare pixels.
   Gather all pixels and perform k-means clustering, then sample samples_per_cluster from each cluster.
 
-  :param scoll: EOdal scene collection
-  :param metadta: metadata dataframe
-  :param lower_threshold: dictionary with lower thresh values for each band
-  :param upper_threshold: dictionary with upper thresh values for each band
+  :param gdf: bare soil composite of tile in GeoDataFrame
   :param num_scenes: number of scenes to keep in orer of count of bare soil pixels
   :param samples_per_cluster: number of samples to get from each cluster
 
@@ -291,34 +140,13 @@ def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_sc
   bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']
   pixs_df = pd.DataFrame()
 
-  for i, row in metadata.sort_values(by='n_bare', ascending=False).head(num_scenes).iterrows():
-    date = row['sensing_date']
-    sensor = row['spacecraft_name']
-
-    # Get scene for that date
-    scoll_idx = [i for i, _ in scoll if i.date()==date][0]
-    scene = scoll.__getitem__(scoll_idx) # get scene collection
-
-    # Get pixels in scene
-    pixs = scene.to_dataframe()
-
-    # Remove top and botthom 1% for each band 
-    pixs = filter_dataframe(pixs, lower_threshold, upper_threshold, bands)
-
-    if len(pixs):
-      # Add some useful metadata: sensing date, sensor
-      pixs['sensing_date'] = [date]*len(pixs)
-      pixs['sensor'] = [sensor]*len(pixs)
-      pixs_df = pd.concat([pixs_df, pixs])
-
-
   if len(pixs_df):
     # Apply k-means clustering on the pixel dataset
     optimal_clusters = find_optimal_clusters(pixs_df[bands], max_clusters=10)
     num_clusters = min(optimal_clusters, len(pixs_df))
     print(f'Sampling from {num_clusters} clusters')
     if len(pixs_df)<=num_clusters:
-        print('Warning: all pixels will be sampled as ther are not enough samples for k-means clustering')
+        print('Warning: all pixels will be sampled as there are not enough samples for k-means clustering')
     kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init='auto')
     pixs_df['cluster'] = kmeans.fit_predict(pixs_df[bands])
 
@@ -338,74 +166,6 @@ def sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_sc
   else:
     print('No bare pixels left to sample.')
     return pd.DataFrame()
-
-
-def sample_bare_pixels_perdate(scoll, metadata, lower_threshold, upper_threshold, num_scenees):
-  '''
-  Sample bare pixels from scenes based on k-means clustering.
-  Use the top 3 scenes where there were the most number of bare pixels (clearest days with bare pixels)
-
-  :param scoll: EOdal scene collection
-  :param metadta: metadata dataframe
-  :param lower_threshold: dictionary with lower thresh values for each band
-  :param upper_threshold: dictionary with upper thresh values for each band
-  :param num_scenes: number of scenes to keep in orer of count of bare soil pixels
-
-  :returns: dataframe with sampled pixels
-  '''
-
-  bands = ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A','B11', 'B12']
-  samples = []
-
-  for i, row in metadata.sort_values(by='n_bare', ascending=False).head(num_scenees).iterrows():
-    date = row['sensing_date']
-    sensor = row['spacecraft_name']
-
-    # Get scene for that date
-    scoll_idx = [i for i, _ in scoll if i.date()==date][0]
-    scene = scoll.__getitem__(scoll_idx) # get scene collection
-
-    # Get pixels in scene
-    pixs = scene.to_dataframe()
-
-    # Remove top and botthom 1% for each band 
-    pixs = filter_dataframe(pixs, lower_threshold, upper_threshold, bands)
-
-    if len(pixs):
-      # Add some useful metadata: sensing date, sensor
-      pixs['sensing_date'] = [date]*len(pixs)
-      pixs['sensor'] = [sensor]*len(pixs)
-
-      """ 
-      # Get the pixels with min, max and median SWI (soil moisture index)
-      pixs['SMI'] = (pixs.B08 - pixs.B11)*(pixs.B08 / pixs.B11)
-      min_swi_row = pixs.loc[pixs['SMI'].idxmin()]
-      max_swi_row = pixs.loc[pixs['SMI'].idxmax()]
-      # Calculate median SWI and find the closest row
-      median_swi = pixs['SMI'].median()
-      closest_to_median_row = pixs.iloc[(pixs['SMI'] - median_swi).abs().argsort()[:1]].iloc[0]
-
-      # Append the sampled rows to the list
-      samples.extend([min_swi_row, max_swi_row, closest_to_median_row])
-      """
-
-      # Apply k-means clustering on the pixel data
-      num_clusters = min(5, len(pixs))
-      kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init='auto')
-      pixs['cluster'] = kmeans.fit_predict(pixs[bands])
-
-      # Sample one pixel from each cluster
-      for cluster_id in range(num_clusters):
-          cluster_pixs = pixs[pixs['cluster'] == cluster_id]
-          if not cluster_pixs.empty:
-              # Sample one pixel from this cluster
-              sampled_row = cluster_pixs.sample(1).iloc[0]
-              samples.append(sampled_row)
-
-  # Convert GeoDataFrames to DataFrames before creating the final DataFrame
-  df_sampled = pd.DataFrame([gdf.to_dict() for gdf in samples])
-
-  return df_sampled
 
 
 def upsample_spectra(df, wavelengths, new_wavelengths, method):
@@ -432,6 +192,7 @@ def upsample_spectra(df, wavelengths, new_wavelengths, method):
       interpolated_values = pchip_interpolate([400] + wavelengths, df.values.T, new_wavelengths).T
       interpolated_df = pd.DataFrame(interpolated_values, index=df.index, columns=new_wavelengths)
 
+
     if method == 'combined':
       # First part of spectra with spline, second with pchip
       df.insert(0, '400', df.apply(lambda row: row.min(), axis=1)) # Bound the values for the start of the spectra
@@ -449,37 +210,24 @@ def upsample_spectra(df, wavelengths, new_wavelengths, method):
     return interpolated_df
 
 
-def resample_df(df_sampled, s2a, s2b, new_wavelengths, method):
-  '''
-  Resample all sampled pixels from Sentinel-2A and Sentinel-2B
-  
-  :param df_sampled:
-  :param s2a: wavelengths for Sentinel-2A
-  :param s2b: wavelengths for Sentinel-2B
-  :param new_wavelengths: wavelegnths to upsample to
-  :param method: inteprolation method among ['spline', 'pchip']
-  '''
+def resample_df(df_sampled, s2, new_wavelengths, method):
+    '''
+    Resample all sampled pixels from Sentinel-2A and Sentinel-2B
 
-  s2a_df = df_sampled[df_sampled['sensor'] == 'Sentinel-2A']
-  s2b_df = df_sampled[df_sampled['sensor'] == 'Sentinel-2B']
-  df_list = [s2a_df, s2b_df]
+    :param df_sampled:
+    :param s2: wavelengths for Sentinel-2 (generic for 2A and 2B)
+    :param new_wavelengths: wavelegnths to upsample to
+    :param method: inteprolation method among ['spline', 'pchip']
+    '''
 
-  spectra = pd.DataFrame()
+    spectra = pd.DataFrame()
 
-  for df in df_list:
-    if len(df):
-      s2_vals = df[['B01','B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']]
+    s2_vals = df[['B01','B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']]
 
-      # Resample to 1nm
-      if np.unique(df.sensor) == 'Sentinel-2A':
-        df_new = upsample_spectra(s2_vals, s2a, new_wavelengths, method)
-      if np.unique(df.sensor) == 'Sentinel-2B':
-        df_new = upsample_spectra(s2_vals, s2b, new_wavelengths, method)
-      
-      # Append
-      spectra = pd.concat([spectra, df_new])
-  
-  return spectra
+    # Resample to 1nm
+    df_new = upsample_spectra(s2_vals, s2, new_wavelengths, method)
+
+    return df_new
 
 
 def load_scolls(streams: list):
@@ -516,8 +264,10 @@ def load_scolls(streams: list):
 
 if __name__ == '__main__':
 
-    s2a = [442.7, 492.4, 559.8, 664.6, 704.1, 740.5, 782.8, 832.8, 864.7,  1613.7, 2202.4]
-    s2b = [442.2, 492.1, 559.0, 664.9, 703.8, 739.1, 779.7, 832.9, 864.0, 1610.4, 2185.7]
+    #s2a = [442.7, 492.4, 559.8, 664.6, 704.1, 740.5, 782.8, 832.8, 864.7,  1613.7, 2202.4]
+    #s2b = [442.2, 492.1, 559.0, 664.9, 703.8, 739.1, 779.7, 832.9, 864.0, 1610.4, 2185.7]
+    s2 = [443, 492, 560, 665, 740, 781, 833, 864, 1612, 2194]
+
     new_wavelengths = np.arange(400, 2501, 1)
 
     soil_spectra = pd.DataFrame()
@@ -531,98 +281,26 @@ if __name__ == '__main__':
         print(f'Sampling bare soil from tile {tile_id}...')
 
         # Load all tif files for that tile
-        # Put in a geodataframe
-        # Proceed with sampling: might need to change the fact that the dates are not a thing anymore
-
-        # TO DO: could check if tile needs to be processed and skip cropping geom in necessary
-        # Prepare geometry
-        tile = Polygon(tile_coords)
-        tile_gdf = gpd.GeoDataFrame(geometry=[tile], crs='EPSG:4326')
-
-        # Take extra surrounding fields using GeoWP
-        geowp_path = '/home/f80873755@agsad.admin.ch/mnt/Data-Work-RE/27_Natural_Resources-RE/99_GIS_User_protected/GeoWP/Landuse/Landw_Kulturflaechen/2021/01_Geodata/SHP/Nutzungsflaechen_BLW_Schweizweit_merge/ln_nutzung_BLW_2021_CH.shp'
-        geowp = gpd.read_file(geowp_path).to_crs(4326)
-        geowp = geowp.cx[tile_gdf.total_bounds[0]:tile_gdf.total_bounds[2], tile_gdf.total_bounds[1]:tile_gdf.total_bounds[3]]
-        geowp_with_buffer = geowp.copy()
-        buffer_distance = -60 # in meters, if the crs of the gdf is metric
-        geowp_with_buffer['geometry'] = geowp.to_crs(2056).buffer(buffer_distance)
-        geom = gpd.overlay(tile_gdf.to_crs(geowp_with_buffer.crs), geowp_with_buffer, how='intersection')
-
-        """
-        # Plot the geometry and save image
-        fig, ax = plt.subplots(figsize=(10, 8))
-        geom.to_crs('EPSG:4326').plot(ax=ax, color='r')
-        bounds = tile_gdf.total_bounds
-        ax.set_xlim((bounds[0]-0.02, bounds[2]+0.02))
-        ax.set_ylim((bounds[1]-0.01, bounds[3]+0.01))
-        ctx.add_basemap(ax=ax, crs='EPSG:4326')
-        plt.savefig(base_dir.joinpath(f'results/geom_{tile_id}.png'))
-        plt.close()          
-        """
-
-        for YEAR in year_list:
-            for MONTH in range(1, 13):  # Months range from 1 to 12
-                # Determine the last day of the month
-                last_day = calendar.monthrange(YEAR, MONTH)[1]
-                date_start = datetime(YEAR, MONTH, 1)
-                date_end = datetime(YEAR, MONTH, last_day) # Includes last date
-
-                # Setup parameters
-                save_path = base_dir.joinpath(f'results/eodal_baresoil_s2_data_{tile_id}_{YEAR}_{MONTH}.pkl')
-                metadata_path = save_path.with_name(save_path.name.replace('data', 'metadata'))
-            
-                # Get data if not done yet
-                if not save_path.exists() or not metadata_path.exists():
-                    print('Extracting data for year ' + str(YEAR) + '-' +str(MONTH))
-
-                    res_baresoil = extract_s2_data(
-                        aoi=geom.to_crs(4326).dissolve(), 
-                        time_start=date_start,
-                        time_end=date_end,
-                        tile=tile_id
-                    )
-
-                    if len(res_baresoil.metadata):
-                        # Save data for future use
-                        with open(save_path, 'wb+') as dst:
-                            dst.write(res_baresoil.data.to_pickle())     
-                        with open(metadata_path, 'wb+') as dst:
-                            pickle.dump(res_baresoil.metadata, dst)
-                    else:
-                        print(f'No data for tile {tile_id} in {YEAR}-{MONTH}. Skipping...')
-                        continue
-            
-            
-        # Load data: all scene collections and metadata for a given tile
-        scoll_pattern = f'results/eodal_baresoil_s2_data_{tile_id}_*.pkl'
-        scoll_files = glob.glob(str(base_dir.joinpath(scoll_pattern)))
-        scoll_files = [f for f in scoll_files] # need to order the filenames?
-        meta_pattern = f'results/eodal_baresoil_s2_metadata_{tile_id}_*.pkl'
-        meta_files = glob.glob(str(base_dir.joinpath(meta_pattern)))
-        meta_files = [f for f in meta_files] # need to order the filenames?
-        print(meta_files)
+        tile_BS_paths = glob.glob(base_dir.joinpath(f'data/S2_baresoil_GEE/*{tile_id}*.tif'))
     
-        scoll = load_scolls(streams=scoll_files)
-        dfs = []
-        for file_path in meta_files:
-            df = pd.read_pickle(file_path)
-            dfs.append(df)
-        metadata = pd.concat(dfs, ignore_index=True)
-        print(len(metadata))
+        # Put in a geodataframe
+        gdfs_tile = [load_raster_gdf(f) for f in tile_BS_paths]
+        gdf_tile = pd.concat(gdfs_tile, ignore_index=True)
+        # Optional: check how many to sample? 
 
 
-        # Compute band percentile thresholds in scene collection (for filtering)
-        lower_threshold, upper_threshold = compute_scoll_percentiles(scoll)
+        # Proceed with sampling: might need to change the fact that the dates are not a thing anymore
+        # Remove snowy pixels
 
         # Sample pixels: 5 pixs per date, for top 6 dates with most bare pixels
-        df_sampled = sample_bare_pixels(scoll, metadata, lower_threshold, upper_threshold, num_scenes=12, samples_per_cluster=5)
+        df_sampled = sample_bare_pixels(gdf, num_scenes=12, samples_per_cluster=5)
         if len(df_sampled):
             sampled_path = base_dir.joinpath(f'results/sampled_pixels_{tile_id}.pkl')
             with open(sampled_path, 'wb+') as dst:
                 pickle.dump(df_sampled, dst)
 
             # Resample to 1nm 
-            spectra = resample_df(df_sampled, s2a, s2b, new_wavelengths, upsample_method)
+            spectra = resample_df(df_sampled, s2, new_wavelengths, upsample_method)
             spectra_path = base_dir.joinpath(f'results/sampled_spectra_{tile_id}.pkl')
             with open(spectra_path, 'wb+') as dst:
                 pickle.dump(spectra, dst)
