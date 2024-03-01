@@ -56,10 +56,8 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     # Assuming all files in the list are pickled DataFrames
     dfs = [pd.read_pickle(path) for path in data_path]
     concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
-    # Sample 50000 data pairs
-    sampled_df = concatenated_df.sample(50000, random_state=config['Seed'])
-    X = sampled_df[config['Data']['train_cols']] #  concatenated_df[config['Data']['train_cols']]
-    y = sampled_df[config['Data']['target_col']] #  concatenated_df[config['Data']['target_col']]
+    X = concatenated_df[config['Data']['train_cols']] #  concatenated_df[config['Data']['train_cols']]
+    y = concatenated_df[config['Data']['target_col']] #  concatenated_df[config['Data']['target_col']]
     if config['Data']['normalize']:
       # Load scaler
       scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl'
