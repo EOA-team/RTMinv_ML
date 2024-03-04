@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pickle
 from typing import List
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Polygon, MultiPolygon, Point
 from datetime import datetime, timedelta
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
@@ -18,6 +18,7 @@ import time
 import glob
 import contextily as ctx
 import calendar
+import rasterio
 
 import os
 from pathlib import Path
@@ -68,11 +69,16 @@ def load_raster_gdf(tif_path: Path):
     gdf = gpd.GeoDataFrame(geometry=geometry, crs=crs)
 
     # Add columns for each band value
-    col_names = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12', 'ndvi', 'nbr2']
-    for i, band_values in enumerate(raster_array):
-        gdf[f'{col_names[i]}'] = band_values.flatten()
+    col_names = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09', 'B11', 'B12', 'ndvi', 'nbr2']
+    for i in range(len(col_names)):  
+        band_values = raster_array[i]
+        gdf[col_names[i]] = band_values.flatten()
+   
+    gdf.dropna(how='all', inplace=True)
 
-    gdf.dropna(inplace=True)
+    # Bands are between 0 - 10000, need to be normalised
+    for band in col_names[:-2]:
+        gdf[band] = gdf[band] / 10000.0
 
     return gdf
 
@@ -125,13 +131,12 @@ def find_optimal_clusters(data, max_clusters=10):
     return optimal_clusters
 
 
-def sample_bare_pixels(gdf, num_scenes, samples_per_cluster):
+def sample_bare_pixels(gdf, samples_per_cluster):
   '''
   Use the top num_scenes scenes where there were the most number of bare pixels (clearest days with bare pixels.
   Gather all pixels and perform k-means clustering, then sample samples_per_cluster from each cluster.
 
   :param gdf: bare soil composite of tile in GeoDataFrame
-  :param num_scenes: number of scenes to keep in orer of count of bare soil pixels
   :param samples_per_cluster: number of samples to get from each cluster
 
   :returns: dataframe with sampled pixels
@@ -266,13 +271,13 @@ if __name__ == '__main__':
 
     #s2a = [442.7, 492.4, 559.8, 664.6, 704.1, 740.5, 782.8, 832.8, 864.7,  1613.7, 2202.4]
     #s2b = [442.2, 492.1, 559.0, 664.9, 703.8, 739.1, 779.7, 832.9, 864.0, 1610.4, 2185.7]
-    s2 = [443, 492, 560, 665, 740, 781, 833, 864, 1612, 2194]
+    s2 = [443, 492, 560, 665, 704, 740, 781, 833, 864, 1612, 2194]
 
     new_wavelengths = np.arange(400, 2501, 1)
 
     soil_spectra = pd.DataFrame()
 
-    tiles = ['32TMT', '32TLT', '32TNT', '32TNS', '32TMS', '32TLS', '31TGM', '31TGN']
+    tiles = ['32TMT', '32TLT', '32TNT', '31TGM', '31TGN'] #'32TNS', '32TMS', '32TLS',  
     year_list = [2017, 2018, 2019, 2020, 2021, 2022, 2023]
 
     upsample_method = 'pchip'
@@ -281,27 +286,33 @@ if __name__ == '__main__':
         print(f'Sampling bare soil from tile {tile_id}...')
 
         # Load all tif files for that tile
-        tile_BS_paths = glob.glob(base_dir.joinpath(f'data/S2_baresoil_GEE/*{tile_id}*.tif'))
-    
+        tile_BS_paths = glob.glob(str(base_dir.joinpath(f'data/S2_baresoil_GEE/*{tile_id}*.tif')))
+
         # Put in a geodataframe
         gdfs_tile = [load_raster_gdf(f) for f in tile_BS_paths]
         gdf_tile = pd.concat(gdfs_tile, ignore_index=True)
         # Optional: check how many to sample? 
+        print('after loading', len(gdf_tile))
 
-
-        # Proceed with sampling: might need to change the fact that the dates are not a thing anymore
-        # Remove snowy pixels
+        # Remove snowy pixels: drop if B02 > 0.1, B03 > 0.4, B04 > 0.4
+        """
+        gdf_tile = gdf_tile[(gdf_tile['B02'] < 0.1)]# & (gdf_tile['B03'] < 0.4) & (gdf_tile['B04'] < 0.4)]
+        print('after filtering', len(gdf_tile))
+        """
+        gdf_tile = gdf_tile[(gdf_tile['B02'] < 0.1) & (gdf_tile['B03'] < 0.4) & (gdf_tile['B04'] < 0.4)]
+        print('after filtering 2', len(gdf_tile))
+        print(gdf.head())
 
         # Sample pixels: 5 pixs per date, for top 6 dates with most bare pixels
-        df_sampled = sample_bare_pixels(gdf, num_scenes=12, samples_per_cluster=5)
+        df_sampled = sample_bare_pixels(gdf_tile, samples_per_cluster=5)
         if len(df_sampled):
-            sampled_path = base_dir.joinpath(f'results/sampled_pixels_{tile_id}.pkl')
+            sampled_path = base_dir.joinpath(f'results/GEE_baresoil/sampled_pixels_{tile_id}.pkl')
             with open(sampled_path, 'wb+') as dst:
                 pickle.dump(df_sampled, dst)
 
             # Resample to 1nm 
             spectra = resample_df(df_sampled, s2, new_wavelengths, upsample_method)
-            spectra_path = base_dir.joinpath(f'results/sampled_spectra_{tile_id}.pkl')
+            spectra_path = base_dir.joinpath(f'results/GEE_baresoil/sampled_spectra_{tile_id}.pkl')
             with open(spectra_path, 'wb+') as dst:
                 pickle.dump(spectra, dst)
 
@@ -309,7 +320,7 @@ if __name__ == '__main__':
 
 
     print(f'Saving all samples for tile {tile_id}...')
-    spectra_path = base_dir.joinpath(f'results/sampled_spectra_all_CH.pkl')
+    spectra_path = base_dir.joinpath(f'results/GEE_baresoil/sampled_spectra_all_CH.pkl')
     with open(spectra_path, 'wb+') as dst:
         pickle.dump(soil_spectra, dst)
     print('Finished.')
