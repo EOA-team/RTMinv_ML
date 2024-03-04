@@ -74,7 +74,7 @@ def load_raster_gdf(tif_path: Path):
         band_values = raster_array[i]
         gdf[col_names[i]] = band_values.flatten()
    
-    gdf.dropna(how='all', inplace=True)
+    gdf.dropna(inplace=True)
 
     # Bands are between 0 - 10000, need to be normalised
     for band in col_names[:-2]:
@@ -131,19 +131,18 @@ def find_optimal_clusters(data, max_clusters=10):
     return optimal_clusters
 
 
-def sample_bare_pixels(gdf, samples_per_cluster):
+def sample_bare_pixels(pixs_df, samples_per_cluster):
   '''
   Use the top num_scenes scenes where there were the most number of bare pixels (clearest days with bare pixels.
   Gather all pixels and perform k-means clustering, then sample samples_per_cluster from each cluster.
 
-  :param gdf: bare soil composite of tile in GeoDataFrame
+  :param pixs_df: bare soil composite of tile in GeoDataFrame
   :param samples_per_cluster: number of samples to get from each cluster
 
   :returns: dataframe with sampled pixels
   '''
 
   bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']
-  pixs_df = pd.DataFrame()
 
   if len(pixs_df):
     # Apply k-means clustering on the pixel dataset
@@ -300,8 +299,8 @@ if __name__ == '__main__':
         print('after filtering', len(gdf_tile))
         """
         gdf_tile = gdf_tile[(gdf_tile['B02'] < 0.1) & (gdf_tile['B03'] < 0.4) & (gdf_tile['B04'] < 0.4)]
-        print('after filtering 2', len(gdf_tile))
-        print(gdf.head())
+        print('after filtering', len(gdf_tile))
+        print(gdf_tile.head())
 
         # Sample pixels: 5 pixs per date, for top 6 dates with most bare pixels
         df_sampled = sample_bare_pixels(gdf_tile, samples_per_cluster=5)
