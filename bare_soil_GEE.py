@@ -24,21 +24,6 @@ import os
 from pathlib import Path
 import sys
 base_dir = Path(os.path.dirname(os.path.realpath("__file__"))).parent
-sys.path.insert(0, os.path.join(base_dir, "eodal"))
-import eodal
-
-from datetime import datetime
-from eodal.config import get_settings
-from eodal.core.scene import SceneCollection
-from eodal.core.sensors.sentinel2 import Sentinel2
-from eodal.mapper.feature import Feature
-from eodal.mapper.filter import Filter
-from eodal.mapper.mapper import Mapper, MapperConfigs
-from eodal.utils.reprojection import infer_utm_zone
-
-Settings = get_settings()
-# set to False to use a local data archive
-Settings.USE_STAC = True
 
 
 def load_raster_gdf(tif_path: Path):
@@ -83,32 +68,58 @@ def load_raster_gdf(tif_path: Path):
     return gdf
 
 
-def filter_dataframe(df, lower_threshold, upper_threshold, bands):
-    '''
-    Remove pixels where a band is below/above the 1st/99th percentile (across the whole collection of scenes)
+def compute_gdf_percentiles(gdf, bands):
+    ''' 
+    Find the 10th and 90th percentile for each band in the geodataframe
 
-    :param df: dataframe to filter
-    :param lower_threshold: dictionary with lower thresh values for each band
-    :param upper_threshold: dictionary with upper thresh values for each band
-    :param bands: columns in df that correspond to bands to filter
+    :param gdf: Geodataframe with Sentinel-2 reflectance values
+    :params bands: list of bands to compute percentiles for
     '''
+    lower_threshold = {}
+    upper_threshold = {}
+
     for band in bands:
-        if band == 'B01':
-            # don't use B01 for filtering, just for future interpolation
-            continue
-        else:
-            lower_thr = lower_threshold[band]
-            upper_thr = upper_threshold[band]
-            # Set values outside the threshold to np.nan
-            df[band] = np.where((df[band] < lower_thr) | (df[band] > upper_thr), np.nan, df[band])
-    
-    df = df.dropna()
-    return df
+        if band not in lower_threshold:
+            lower_threshold.update({band: float('inf')})  # Initialize to positive infinity
+        if band not in upper_threshold:
+            upper_threshold.update({band: float('-inf')})  # Initialize to negative infinity
+
+        band_values = gdf[band].dropna().values  # Drop NaN values for the band
+        if len(band_values) > 0:
+            band_lower = np.percentile(band_values, 10)
+            band_upper = np.percentile(band_values, 90)
+
+            # Update lower_threshold and upper_threshold for each band
+            lower_threshold[band] = min(lower_threshold[band], band_lower)
+            upper_threshold[band] = max(upper_threshold[band], band_upper)
+
+    return lower_threshold, upper_threshold
+
+
+def filter_gdf(gdf):
+    '''
+    Remove pixels where a band is below/above the 10th/90th percentile for that raster (in gdf format)
+
+    :param gdf: Geodataframe with Sentinel-2 reflectance values to filter
+    '''
+
+    bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09', 'B11', 'B12']
+
+    # Find the 10th and 90th percentiles per band
+    lower_threshold, upper_threshold = compute_gdf_percentiles(gdf, bands)
+
+    for band in bands:
+        lower_thr = lower_threshold[band]
+        upper_thr = upper_threshold[band]
+        # Filter values outside the threshold
+        gdf = gdf[(gdf[band] >= lower_thr) & (gdf[band] <= upper_thr)]
+
+    return gdf
 
 
 def find_optimal_clusters(data, max_clusters=10):
     silhouette_scores = []
-
+    print('Seaching for optimal clusters')
     for i in range(2, max_clusters + 1):
         kmeans = KMeans(n_clusters=i, random_state=42, n_init='auto')
         kmeans.fit(data)
@@ -146,7 +157,8 @@ def sample_bare_pixels(pixs_df, samples_per_cluster):
 
   if len(pixs_df):
     # Apply k-means clustering on the pixel dataset
-    optimal_clusters = find_optimal_clusters(pixs_df[bands], max_clusters=10)
+    #optimal_clusters = find_optimal_clusters(pixs_df[bands], max_clusters=10)
+    optimal_clusters = 5
     num_clusters = min(optimal_clusters, len(pixs_df))
     print(f'Sampling from {num_clusters} clusters')
     if len(pixs_df)<=num_clusters:
@@ -226,7 +238,7 @@ def resample_df(df_sampled, s2, new_wavelengths, method):
 
     spectra = pd.DataFrame()
 
-    s2_vals = df[['B01','B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']]
+    s2_vals = df_sampled[['B01','B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']]
 
     # Resample to 1nm
     df_new = upsample_spectra(s2_vals, s2, new_wavelengths, method)
@@ -234,43 +246,29 @@ def resample_df(df_sampled, s2, new_wavelengths, method):
     return df_new
 
 
-def load_scolls(streams: list):
-    """
-    Load SceneCollection from pickled binary stream.
+def drop_snow_invalid(gdf, b_thresh, g_thresh, r_thresh):
+    '''
+    Remove pixels: drop if B02 > b_thresh, B03 > g_thresh, B04 > r_thresh
+    Impose B01 < B02
 
-    :param streams:
-        list of pickled binary stream to load into a SceneCollection or
-        file-path to pickled binary on disk.
-    :returns:
-        `SceneCollection` instance.
-    """
-    # open empty scene collection
-    scoll_out = SceneCollection()
+    :param gdf: Geodataframe with Sentinel-2 reflectance values
+    :param b_thresh: threshold for B02
+    :param g_thresh: threshold for B03
+    :param r_thresh: threshold for B04
+    '''
+    gdf = gdf[(gdf['B02'] < b_thresh) & (gdf['B03'] < g_thresh) & (gdf['B04'] < r_thresh)]
+    gdf = gdf[gdf['B01'] <= gdf['B02']]
 
-    for stream in streams:
-        if isinstance(stream, Path):
-            with open(stream, "rb") as f:
-                reloaded = pickle.load(f)
-        elif isinstance(stream, str):
-            with open(stream, "rb") as f:
-                reloaded = pickle.load(f)
-        elif isinstance(stream, bytes):
-            reloaded = pickle.loads(stream)
-        else:
-            raise TypeError(f"{type(stream)} is not a supported data type")
-      
-        # add scenes one by one
-        for _, scene in reloaded["collection"].items():
-            scoll_out.add_scene(scene)
+    return gdf
 
-    return scoll_out
+
 
 
 if __name__ == '__main__':
 
     #s2a = [442.7, 492.4, 559.8, 664.6, 704.1, 740.5, 782.8, 832.8, 864.7,  1613.7, 2202.4]
     #s2b = [442.2, 492.1, 559.0, 664.9, 703.8, 739.1, 779.7, 832.9, 864.0, 1610.4, 2185.7]
-    s2 = [443, 492, 560, 665, 704, 740, 781, 833, 864, 1612, 2194]
+    s2 = [443, 492, 560, 665, 704, 740, 781, 833, 864, 1612, 2194] # don't use B09 for interpolation
 
     new_wavelengths = np.arange(400, 2501, 1)
 
@@ -290,36 +288,31 @@ if __name__ == '__main__':
         # Put in a geodataframe
         gdfs_tile = [load_raster_gdf(f) for f in tile_BS_paths]
         gdf_tile = pd.concat(gdfs_tile, ignore_index=True)
-        # Optional: check how many to sample? 
-        print('after loading', len(gdf_tile))
 
-        # Remove snowy pixels: drop if B02 > 0.1, B03 > 0.4, B04 > 0.4
-        """
-        gdf_tile = gdf_tile[(gdf_tile['B02'] < 0.1)]# & (gdf_tile['B03'] < 0.4) & (gdf_tile['B04'] < 0.4)]
-        print('after filtering', len(gdf_tile))
-        """
-        gdf_tile = gdf_tile[(gdf_tile['B02'] < 0.1) & (gdf_tile['B03'] < 0.4) & (gdf_tile['B04'] < 0.4)]
-        print('after filtering', len(gdf_tile))
-        print(gdf_tile.head())
+        # Drop invalid (snowy) or nonsensical data
+        gdf_tile = drop_snow_invalid(gdf_tile, b_thresh=0.1, g_thresh=0.4, r_thresh=0.4)
+
+        # Remove top and bottom 10% of data
+        gdf_tile = filter_gdf(gdf_tile)
 
         # Sample pixels: 5 pixs per date, for top 6 dates with most bare pixels
         df_sampled = sample_bare_pixels(gdf_tile, samples_per_cluster=5)
         if len(df_sampled):
-            sampled_path = base_dir.joinpath(f'results/GEE_baresoil/sampled_pixels_{tile_id}.pkl')
+            sampled_path = base_dir.joinpath(f'results/GEE_baresoil_v2/sampled_pixels_{tile_id}.pkl')
             with open(sampled_path, 'wb+') as dst:
                 pickle.dump(df_sampled, dst)
 
             # Resample to 1nm 
             spectra = resample_df(df_sampled, s2, new_wavelengths, upsample_method)
-            spectra_path = base_dir.joinpath(f'results/GEE_baresoil/sampled_spectra_{tile_id}.pkl')
+            spectra_path = base_dir.joinpath(f'results/GEE_baresoil_v2/sampled_spectra_{tile_id}.pkl')
             with open(spectra_path, 'wb+') as dst:
                 pickle.dump(spectra, dst)
 
-            soil_spectra = pd.concat([soil_spectra, spectra])
+            soil_spectra = pd.concat([soil_spectra, spectra], ignore_index=True)
 
 
-    print(f'Saving all samples for tile {tile_id}...')
-    spectra_path = base_dir.joinpath(f'results/GEE_baresoil/sampled_spectra_all_CH.pkl')
+    print(f'Saving all samples...')
+    spectra_path = base_dir.joinpath(f'results/GEE_baresoil_v2/sampled_spectra_all_CH.pkl')
     with open(spectra_path, 'wb+') as dst:
         pickle.dump(soil_spectra, dst)
     print('Finished.')
