@@ -281,7 +281,7 @@ if __name__ == '__main__':
 
     for tile_id in tiles:
         print(f'Sampling bare soil from tile {tile_id}...')
-
+        
         # Load all tif files for that tile
         tile_BS_paths = glob.glob(str(base_dir.joinpath(f'data/S2_baresoil_GEE/*{tile_id}*.tif')))
 
@@ -294,6 +294,7 @@ if __name__ == '__main__':
 
         # Remove top and bottom 10% of data
         gdf_tile = filter_gdf(gdf_tile)
+        
 
         # Sample pixels: 5 pixs per date, for top 6 dates with most bare pixels
         df_sampled = sample_bare_pixels(gdf_tile, samples_per_cluster=5)
@@ -308,8 +309,21 @@ if __name__ == '__main__':
             with open(spectra_path, 'wb+') as dst:
                 pickle.dump(spectra, dst)
 
-            soil_spectra = pd.concat([soil_spectra, spectra], ignore_index=True)
+            soil_spectra = pd.concat([soil_spectra, spectra])
+        
+        """ 
+        sampled_path = base_dir.joinpath(f'results/GEE_baresoil_v2/sampled_pixels_{tile_id}.pkl')
+        with open(sampled_path, 'rb+') as dst:
+            df_sampled = pickle.load(dst)
+        
+        # Resample to 1nm 
+        spectra = resample_df(df_sampled, s2, new_wavelengths, upsample_method)
+        spectra_path = base_dir.joinpath(f'results/GEE_baresoil_v2/sampled_spectra_{tile_id}.pkl')
+        with open(spectra_path, 'wb+') as dst:
+            pickle.dump(spectra, dst)
 
+        soil_spectra = pd.concat([soil_spectra, spectra])
+        """
 
     print(f'Saving all samples...')
     spectra_path = base_dir.joinpath(f'results/GEE_baresoil_v2/sampled_spectra_all_CH.pkl')
