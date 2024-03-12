@@ -61,13 +61,13 @@ def generate_spectra(
   lut_params_pheno = lut_params_dir.joinpath('prosail_danner-etal_switzerland.csv') # Only use general params for LUT
 
   pheno_phases = \
-      lut_params_pheno.name.split('.csv')[0] +'_S2A'
+      lut_params_pheno.name.split('.csv')[0] +'_S2B'
       #lut_params_pheno.name.split('etal')[-1].split('.')[0][1::]
 
   # generate lookup-table
   trait_str = '-'.join(traits)
   fpath_lut = output_dir.joinpath(
-    f'{pheno_phases}_{trait_str}_lut_no-constraints_soil.pkl')
+    f'{pheno_phases}_{trait_str}_lut_no-constraints.pkl')
 
   # if LUT exists, continue, else generate it
   if not fpath_lut.exists():
@@ -119,7 +119,7 @@ def generate_spectra_soil(
   # generate lookup-table
   trait_str = '-'.join(traits)
   fpath_lut = output_dir.joinpath(
-    f'{pheno_phases}_{trait_str}_lut_no-constraints_soil2.pkl')
+    f'{pheno_phases}_{trait_str}_lut_no-constraints.pkl')
 
   # Add soil spectra to inputs
   # one method is to provide the spectra as rsoil0, but then it will not be scaled by the brightness and wetness params rsoil and psoil
@@ -180,7 +180,7 @@ if __name__ == '__main__':
   os.chdir(cwd)
 
   # global setup
-  out_dir = Path('../results').joinpath('lut_based_inversion')
+  out_dir = Path('../results').joinpath('lut_based_inversion/soil_scaled')
   out_dir.mkdir(exist_ok=True)
 
   # spectral response function of Sentinel-2 for resampling PROSAIL output
@@ -200,7 +200,7 @@ if __name__ == '__main__':
   # directory with LUT parameters for different phenological macro-stages
   lut_params_dir = Path('lut_params')
   # Path to soil spectra to use
-  soil_path = Path('../results/sampled_spectra_all.pkl')
+  soil_path = Path('../results/GEE_baresoil_v2/sampled_spectra_all_CH.pkl')
 
   # target trait(s)
   traits = ['lai', 'cab', 'ccc', 'car']
