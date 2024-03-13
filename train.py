@@ -65,10 +65,11 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     dfs = [pd.read_pickle(path) for path in data_path]
     concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
     # Sample 50000 data pairs
-    sampled_df = concatenated_df.sample(50000, random_state=config['Seed']) if len(concatenated_df) > 50000 else concatenated_df
-    X = sampled_df[config['Data']['train_cols']] #  concatenated_df[config['Data']['train_cols']]
-    y = sampled_df[config['Data']['target_col']] #  concatenated_df[config['Data']['target_col']]
+    #sampled_df = concatenated_df.sample(50000, random_state=config['Seed']) if len(concatenated_df) > 50000 else concatenated_df
+    X = concatenated_df[config['Data']['train_cols']] #sampled_df[config['Data']['train_cols']] #
+    y = concatenated_df[config['Data']['target_col']] #sampled_df[config['Data']['target_col']] #  
     X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
+    #print(len(X_train), len(X_test))
     if config['Data']['normalize']:
       scaler = MinMaxScaler()
       X_train = scaler.fit_transform(X_train) # becomes an array
@@ -120,6 +121,7 @@ def train_model(config: dict) -> None:
 
   # Move data to CUDA if GPUs requested and available
   device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
+  #print(torch.cuda.is_available())
   if device == torch.device('cuda'):
     X_train, X_test, y_train, y_test = (
       torch.FloatTensor(X_train).to(device),

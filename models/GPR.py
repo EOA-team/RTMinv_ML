@@ -246,28 +246,43 @@ class GaussianProcessActiveLearner:
         :param y_test: Test labels
         '''
         # Seperate train data in self.n_iter subsets -> random subset
-        kf = KFold(n_splits=len(X_train)//self.max_samples, shuffle=True, random_state=self.random_state)
+        n_splits = len(X_train)//self.max_samples
+        if n_splits == 1:
+            kf = None
+        else:
+            kf = KFold(n_splits=len(X_train)//self.max_samples, shuffle=True, random_state=self.random_state)
 
         rmse_scores = []
         avg_std = []
+        # Track overall best model
+        self.best_model = None
+        best_rmse = np.inf
+
         for _ in tqdm(range(self.n_iter), desc='Iteration'):
-            _, subset_index = next(kf.split(X_train))
+            if kf is not None:
+                _, subset_index = next(kf.split(X_train))
+                # Get the current subset to work on
+                X_train_sub = X_train[subset_index][:self.max_samples] # trim if necessary
+                y_train_sub = y_train[subset_index][:self.max_samples]
+            else:
+                X_train_sub = X_train
+                y_train_sub = y_train
 
-            # Get the current subset to work on
-            X_train_sub = X_train[subset_index][:self.max_samples] # trim if necessary
-            y_train_sub = y_train[subset_index][:self.max_samples]
-
+            
             # Split the training subset into an initial pool and remaining samples
             X_initial, X_remaining, y_initial, y_remaining = train_test_split(
                 X_train_sub, y_train_sub, train_size=self.n_initial, random_state=self.random_state
             )
 
-            self.initialize_active_learner(X_initial=X_initial, y_initial=y_initial)
             # Perform active learning until reaching self.max_samples in total
+            self.initialize_active_learner(X_initial=X_initial, y_initial=y_initial)
             samples_queried = self.n_initial
             sampling_iter = 0
-            self.best_model = None
-            best_rmse = np.inf
+
+            # Track model perfromance at each query
+            current_model_rmse = np.inf
+            X_train_current = X_initial.copy()
+            y_train_current = y_initial.copy()
 
             while samples_queried < self.max_samples and sampling_iter < self.max_queries: #or stop when rmse good enough
                 # Query new samples based on uncertainty
@@ -287,21 +302,40 @@ class GaussianProcessActiveLearner:
                 else:
                     query_labels = query_labels.reshape(-1,1)
 
-                # Update the active learner with the new samples
-                self.active_learner.teach(query_inst, query_labels)
+                
+                # Fit the model with the current training data plus the newly sampled points
+                current_estimator = self.active_learner.estimator
+                self.active_learner.estimator.fit(np.concatenate([X_train_current, query_inst]),
+                                                np.concatenate([y_train_current, query_labels.reshape(1,)]))
 
-                # Move the newly labeled samples from the remaining pool to the training pool
+                # Compute predictions after adding the new samples
+                y_pred, _ = self.active_learner.estimator.predict(X_test, return_std=True)
+                iter_rmse = mean_squared_error(y_test, y_pred, squared=False)
+
+                if iter_rmse < current_model_rmse:
+                    current_model_rmse = iter_rmse
+                    # Update the active learner with the new samples
+                    self.active_learner.teach(query_inst, query_labels)
+                    X_train_current = np.concatenate([X_train_current, query_inst])
+                    y_train_current = np.concatenate([y_train_current, query_labels.reshape(1,)])
+                else:
+                    # If performance does not improve, revert the active learner
+                    self.active_learner.estimator = current_estimator
+            
+                # Move the newly tested samples from the remaining pool to the training pool
                 X_remaining = np.delete(X_remaining, query_idx, axis=0)
                 y_remaining = np.delete(y_remaining, query_idx, axis=0)
 
                 # Update the count of samples queried
                 samples_queried += len(query_idx) if not np.isscalar(query_idx) else 1
-
+                
             # Print the final model performance for each fold
             y_pred, y_std = self.active_learner.predict(X_test, return_std=True) 
             iter_rmse = mean_squared_error(y_test, y_pred, squared=False)
             rmse_scores.append(iter_rmse)
             avg_std.append(np.mean(y_std))
+
+            print(f'Trained model with RMSE {iter_rmse} and {samples_queried} samples')
 
             # Update the best model
             if iter_rmse < best_rmse:

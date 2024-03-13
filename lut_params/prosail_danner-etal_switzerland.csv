@@ -10,8 +10,8 @@ lai,0,8,,,Uniform
 lidfa,30,70,45,15,Uniform
 lidfb,0,0,,,Constant
 hspot,0.01,0.5,,,Uniform
-rsoil,0,1,,,Uniform
-psoil,0,1,,,Uniform
+rsoil,0,1.2,,,Uniform
+psoil,1,1,,,Constant
 tts,20,50,,,Uniform
 tto,2,12,,,Uniform
 psi,0,160,,,Uniform
