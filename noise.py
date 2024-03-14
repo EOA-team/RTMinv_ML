@@ -135,11 +135,11 @@ if __name__ == '__main__':
 
   noise_levels = [1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
   noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined']
-  cols = ['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
+  cols = ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B10', 'B11', 'B12']
 
   # Load data
-  data_path = ['../results/lut_based_inversion/prosail_danner-etal_switzerland_S2A_lai-cab-ccc-car_lut_no-constraints.pkl', \
-    '../results/lut_based_inversion/prosail_danner-etal_switzerland_S2B_lai-cab-ccc-car_lut_no-constraints.pkl']
+  data_path = ['../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_S2A_lai-cab-ccc-car_lut_no-constraints.pkl', \
+    '../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_S2B_lai-cab-ccc-car_lut_no-constraints.pkl']
 
   if isinstance(data_path, str):
     df = pd.read_pickle(data_path)
@@ -149,12 +149,13 @@ if __name__ == '__main__':
 
   for noise_type in noise_types:
     for noise_level in noise_levels:
+      print(f'Adding noise {noise_level}% {noise_type}')
 
       df_noisy = add_noise(df[cols], noise_level, noise_type)
       # Re add columns that where removed
       df_noisy = pd.concat([df[df.columns.difference(cols)], df_noisy], axis=1)
 
       # Save noisy data
-      with open(f'../results/lut_based_inversion/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints_{noise_type}{noise_level}.pkl', 'wb') as f:
+      with open(f'../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints_{noise_type}{noise_level}.pkl', 'wb') as f:
         pickle.dump(df_noisy, f)
 
