@@ -64,7 +64,7 @@ if __name__ == "__main__":
         config['Data']['data_path'] = [f.split('.pkl')[0] + f'_{noise_type}{noise_level}.pkl' for f in config['Data']['data_path']]
         config_test = copy.deepcopy(config)
 
-        #train_model(config)
+        train_model(config)
         model_name, test_rmse, y_std = test_model(config_test)
         #results.append((model_name + f'_{noise_type}{noise_level}', test_rmse, y_std))
         results[noise_type]['rmse'].append(test_rmse)
