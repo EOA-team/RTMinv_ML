@@ -249,8 +249,11 @@ class GaussianProcessActiveLearner:
         n_splits = len(X_train)//self.max_samples
         if n_splits == 1:
             kf = None
+            # No cross-validation, use the entire training set for each iteration
+            kf_iterator = [(slice(None), slice(None))] * self.n_iter
         else:
             kf = KFold(n_splits=len(X_train)//self.max_samples, shuffle=True, random_state=self.random_state)
+            kf_iterator = kf.split(X_train)
 
         rmse_scores = []
         avg_std = []
@@ -258,13 +261,13 @@ class GaussianProcessActiveLearner:
         self.best_model = None
         best_rmse = np.inf
 
-        for _ in tqdm(range(self.n_iter), desc='Iteration'):
+        for _, subset_index in tqdm(kf_iterator, total=self.n_iter, desc='Iteration'):
             if kf is not None:
-                _, subset_index = next(kf.split(X_train))
                 # Get the current subset to work on
                 X_train_sub = X_train[subset_index][:self.max_samples] # trim if necessary
                 y_train_sub = y_train[subset_index][:self.max_samples]
             else:
+                # Use entire training set
                 X_train_sub = X_train
                 y_train_sub = y_train
 
@@ -346,6 +349,8 @@ class GaussianProcessActiveLearner:
         avg_rmse = np.mean(rmse_scores)
         print(f'Avg Test RMSE: {avg_rmse} \nBest test RMSE: {best_rmse}')
         print(f'Avg prediction uncertainty (std): {np.mean(avg_std)}')
+
+        print('Checking if iter_rmse changes:', rmse_scores[0]==rmse_scores[1])
         
         return
 
