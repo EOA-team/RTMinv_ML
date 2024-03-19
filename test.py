@@ -49,6 +49,9 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
       # Normalize
       X = scaler.transform(X)
       return X, y
+      #X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
+      #print('here')
+      #return X_test, y_test
     else:
       return X, y
 

@@ -44,6 +44,16 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     X = df[config['Data']['train_cols']]
     y = df[config['Data']['target_col']]
     X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
+
+    if 'baresoil_samples' in config['Data'].keys():
+      baresoil_dfs = [pd.read_pickle(path) for path in config['Data']['baresoil_samples']]
+      concatenated_df = pd.concat(baresoil_dfs, axis=0, ignore_index=True)
+      X_soil = concatenated_df[config['Data']['train_cols']]
+      y_soil = pd.Series([0]*len(X_soil))
+
+    X_train = pd.concat([X_train , X_soil], ignore_index=True)
+    y_train = pd.concat([y_train , y_soil], ignore_index=True)
+
     if config['Data']['normalize']:
       scaler = MinMaxScaler()
       X_train = scaler.fit_transform(X_train) # becomes an array
@@ -69,6 +79,16 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     X = concatenated_df[config['Data']['train_cols']] #sampled_df[config['Data']['train_cols']] #
     y = concatenated_df[config['Data']['target_col']] #sampled_df[config['Data']['target_col']] #  
     X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
+
+    if 'baresoil_samples' in config['Data'].keys():
+      baresoil_dfs = [pd.read_pickle(path) for path in config['Data']['baresoil_samples']]
+      concatenated_df = pd.concat(baresoil_dfs, axis=0, ignore_index=True)
+      X_soil = concatenated_df[config['Data']['train_cols']]
+      y_soil = pd.Series([0]*len(X_soil))
+    
+    X_train = pd.concat([X_train , X_soil], ignore_index=True)
+    y_train = pd.concat([pd.Series(y_train), y_soil], ignore_index=True)
+
     #print(len(X_train), len(X_test))
     if config['Data']['normalize']:
       scaler = MinMaxScaler()
@@ -82,7 +102,7 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
 
       with open(scaler_path, 'wb') as f:
         pickle.dump(scaler, f)
-      return X_train, X_test, y_train, y_test
+      return X_train, X_test, y_train.values, y_test
     else:
       return X_train.values, X_test.values, y_train, y_test
 
