@@ -121,10 +121,10 @@ class NeuralNetworkRegressor(nn.Module):
       self.model.eval()
 
       # Convert NumPy array to PyTorch tensor
-      X_test_tensor = torch.FloatTensor(X_test)
+      X_test_tensor = torch.FloatTensor(X_test) if not torch.is_tensor(X_test) else X_test
 
       # Make predictions on the testing set
-      predictions = self.model(X_test_tensor).detach().numpy()
+      predictions = self.model(X_test_tensor).detach().cpu().numpy()
 
       return predictions
 
@@ -135,6 +135,12 @@ class NeuralNetworkRegressor(nn.Module):
       :param y_test: test labels
       :param y_pred: test predictions
       '''
+      # Move y_pred to CPU if it's on CUDA device
+      if isinstance(y_pred, torch.Tensor) and y_pred.device.type == 'cuda':
+          y_pred = y_pred.cpu().detach().numpy()
+      if isinstance(y_test, torch.Tensor) and y_test.device.type == 'cuda':
+          y_test = y_test.cpu().detach().numpy()
+
       # Compute RMSE on the test set
       test_rmse = mean_squared_error(y_test, y_pred, squared=False)
       print(f'Test RMSE: {test_rmse}')

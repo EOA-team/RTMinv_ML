@@ -164,7 +164,7 @@ def train_model(config: dict) -> None:
   if device == torch.device('cuda'):
     model.to(device)
   #print(f"Model on: {next(model.parameters()).device}")
-  #print(f"Data on: {X_train.device}")
+  #print(f"Data on: {X_test.device}")
 
    
   #############################################

@@ -48,12 +48,12 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
         scaler = pickle.load(f)
       # Normalize
       X = scaler.transform(X)
-      return X, y
+      return X, y.values
       #X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
       #print('here')
       #return X_test, y_test
     else:
-      return X, y
+      return X, y.values
 
   elif isinstance(data_path, list):
     # Assuming all files in the list are pickled DataFrames
@@ -68,9 +68,9 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
         scaler = pickle.load(f)
       # Normalize
       X = scaler.transform(X)
-      return X, y
+      return X, y.values
     else:
-      return X, y
+      return X, y.values
 
   else:
       return None
