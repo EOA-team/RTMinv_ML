@@ -10,12 +10,12 @@ Model:
         lr: 0.01
     save: True
     save_path: 'trained_models/NN_soilscaled2.pkl'
-    gpu : True
+    gpu : False
 
 Seed: 42
 
 Data:
-    data_path : ['../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_S2A_lai-cab-ccc-car_lut_no-constraints.pkl', '../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_S2B_lai-cab-ccc-car_lut_no-constraints.pkl']
+    data_path : ['../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints.pkl']
     test_data_path : '../results/validation_data.pkl'
     baresoil_samples : ['../results/GEE_baresoil_v2/sampled_pixels_31TGM.pkl', '../results/GEE_baresoil_v2/sampled_pixels_31TGN.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TLT.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TMT.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TNT.pkl']
     train_cols : ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']
