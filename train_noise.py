@@ -47,10 +47,10 @@ def test_model(config: dict) -> None:
 
 if __name__ == "__main__":
 
-    config_path = 'configs/config_GPR.yaml'
+    config_path = 'configs/config_RF.yaml'
 
     noise_levels = [1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
-    noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined']
+    noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
 
     results = {noise_type: {'rmse': [], 'std': []} for noise_type in noise_types}
 
