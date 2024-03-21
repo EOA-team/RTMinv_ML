@@ -13,6 +13,8 @@ from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity, pairwise_distances, pairwise_distances_argmin_min
 from tqdm import tqdm 
 import scipy.optimize
+import warnings
+warnings.filterwarnings("ignore")
 
 
 class MyGPR(GaussianProcessRegressor):
@@ -261,7 +263,10 @@ class GaussianProcessActiveLearner:
         self.best_model = None
         best_rmse = np.inf
 
-        for _, subset_index in tqdm(kf_iterator, total=self.n_iter, desc='Iteration'):
+        #for _, subset_index in tqdm(kf_iterator, total=self.n_iter, desc='Training model nbr'):
+        for i, (_, subset_index) in enumerate(tqdm(kf_iterator, total=self.n_iter, desc='Training model nbr')):
+            if i >= self.n_iter:
+                break
             if kf is not None:
                 # Get the current subset to work on
                 X_train_sub = X_train[subset_index][:self.max_samples] # trim if necessary
@@ -288,6 +293,9 @@ class GaussianProcessActiveLearner:
             y_train_current = y_initial.copy()
 
             while samples_queried < self.max_samples and sampling_iter < self.max_queries: #or stop when rmse good enough
+                if (sampling_iter + 1) % 100 == 0:
+                    print(f'Queried {sampling_iter+1} times, used {samples_queried} samples')
+
                 # Query new samples based on uncertainty
                 query_idx, query_inst = self.active_learner.query(X_remaining)
                 sampling_iter += 1
