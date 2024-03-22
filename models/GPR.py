@@ -293,9 +293,7 @@ class GaussianProcessActiveLearner:
             y_train_current = y_initial.copy()
 
             while samples_queried < self.max_samples and sampling_iter < self.max_queries: #or stop when rmse good enough
-                if (sampling_iter + 1) % 100 == 0:
-                    print(f'Queried {sampling_iter+1} times, used {samples_queried} samples')
-
+                
                 # Query new samples based on uncertainty
                 query_idx, query_inst = self.active_learner.query(X_remaining)
                 sampling_iter += 1
@@ -357,8 +355,6 @@ class GaussianProcessActiveLearner:
         avg_rmse = np.mean(rmse_scores)
         print(f'Avg Test RMSE: {avg_rmse} \nBest test RMSE: {best_rmse}')
         print(f'Avg prediction uncertainty (std): {np.mean(avg_std)}')
-
-        print('Checking if iter_rmse changes:', rmse_scores[0]==rmse_scores[1])
         
         return
 
