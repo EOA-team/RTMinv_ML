@@ -174,85 +174,160 @@ def compute_distance(row):
     return geodesic((row['geometry'].y, row['geometry'].x), (row['geometry_s2'].y, row['geometry_s2'].x)).meters
 
 
+def convert_date(date_string):
+    # Function to convert date string to desired format
+    if len(date_string.split()[0].split('.')[-1]) == 4:
+        input_format = "%d.%m.%Y %H:%M"
+    else:
+        input_format = "%d.%m.%y %H:%M"
+    output_format = "%Y-%m-%d %H:%M:%S"
+    dt_object = datetime.strptime(date_string, input_format)
+    return dt_object.strftime(output_format)
+
+
+def load_data(data_path: str):
+    """ 
+    Load in situ data from gpkg or csv file
+
+    :param data_path: str
+    :return gdf: gpd.GeoDataFrame containing the data
+    :return loc: str containing column name where locations stored
+    :return traits: list containing columns of LAI and GCC stored
+    """
+
+    if data_path.endswith('.gpkg'):
+        gdf = gpd.read_file(data_path, crs='EPSG:2056').drop_duplicates()
+        cols = gdf.columns
+        trait = 'lai' if 'lai' in cols else 'gcc'
+        loc = 'location' if 'location' in cols else None
+        traits = ['lai']
+        # Convert GCC to LAI
+        if trait == 'gcc':
+            gdf['lai'] = [None]*len(gdf)
+            """ 
+            gdf['lai'] = gdf['green_canopy_cover'] / 100
+            """
+            traits += ['green_canopy_cover']
+        if not gdf['date'].apply(lambda x: isinstance(x, str)).all():
+            # Convert date to string '%Y-%m-%d %H:%M:%S'
+            gdf['date'] = gdf['date'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+    if data_path.endswith('csv'):
+        gdf = pd.read_csv(data_path, delimiter=';').drop_duplicates()
+        gdf = gpd.GeoDataFrame(gdf, geometry=gpd.points_from_xy(gdf['X'], gdf['Y']), crs='EPSG:2056')
+        cols = gdf.columns
+        """ 
+        # Convert GCC to LAI where LAI is missing
+        gdf['GLAI [m2/m2]'] = gdf.apply(lambda row: row['GreenCanopyCover [%]'] / 100 if pd.isnull(row['GLAI [m2/m2]']) else row['GLAI [m2/m2]'], axis=1)
+        """ 
+        gdf.rename(columns={'SiteName': 'location', 'GLAI [m2/m2]':'lai', 'GreenCanopyCover [%]':'green_canopy_cover'}, inplace=True)
+        traits = ['lai', 'green_canopy_cover']     
+        loc = 'location'
+        gdf['date'] = gdf['Time'].apply(lambda x: convert_date(x))
+
+
+    return gdf, loc, traits
 
 
 if __name__ == '__main__':
 
   # Path to validation in situ measurements
-  lai_path = base_dir.joinpath('data/in-situ_glai.gpkg')
-  gdf = gpd.read_file(lai_path)
-  locations = ['Strickhof', 'SwissFutureFarm', 'Witzwil']
-
-  # Loop over dates of val data
-  # Query s2 data for those dates
-  # Keep pixel closest to geom
-  # Save pixel LAI and spectra
+  insitu_paths = ['data/in-situ/in-situ_glai_2022.gpkg', 'data/in-situ/in-situ_glai_2023.gpkg',\
+     'data/in-situ/in-situ_gcc_2022.gpkg', 'data/in-situ/WW_traits_PhenomEn_2022.csv','data/in-situ/WW_traits_PhenomEn_2023.csv']
+  insitu_paths = [base_dir.joinpath(p) for p in insitu_paths]
 
   val_df = pd.DataFrame()
 
-  for loc in locations:
-    gdf_loc = gdf[gdf.location==loc]
+  for insitu_path in insitu_paths:
+    gdf, loc_col, trait_cols = load_data(str(insitu_path))
+    locations = gdf[loc_col].unique()
 
-    for d in gdf_loc['date']:
-        try:
-            s2_data = extract_s2_data(
-                aoi=gdf_loc.dissolve(),
-                time_start=pd.to_datetime(d), # - timedelta(days=1), 
-                time_end=pd.to_datetime(d) + timedelta(days=1)
-            )
-        except:
-            pass
-        
-        if s2_data.data is not None:
-            for scene_id, scene in s2_data.data:
-                """
-                pixs = scene.to_dataframe()
-                pixs = pixs.to_crs('EPSG:4326')
+    
+    # Loop over dates of val data
+    # Query s2 data for those dates
+    # Keep pixel closest to geom
+    # Save pixel LAI and spectra
+
+    for loc in locations:
+        gdf_loc = gdf[gdf[loc_col]==loc]
+
+        for d in gdf_loc['date']:
+            if d == 'April': # For 2019 data
+                try:
+                    s2_data = extract_s2_data(
+                        aoi=gdf_loc.dissolve(),
+                        time_start=pd.to_datetime('2019-04-01'), # - timedelta(days=1), 
+                        time_end=pd.to_datetime('2019-04-30') + timedelta(days=1)
+                    )
+                except:
+                    pass
+
+
+            else:
+                try:
+                    s2_data = extract_s2_data(
+                        aoi=gdf_loc.dissolve(),
+                        time_start=pd.to_datetime(d), # - timedelta(days=1), 
+                        time_end=pd.to_datetime(d) + timedelta(days=1)
+                    )
+                except:
+                    pass
                 
-                # Find S2-data closest (within 10m) to validation data for that date
-                gdf_date = gdf_loc[gdf_loc['date'] == d]
-                gdf_date = gdf_date.to_crs(pixs.crs) # to meters, EPSG:32632
-
-                pixs_tree = cKDTree(pixs['geometry'].apply(lambda geom: (geom.x, geom.y)).tolist())
-
-                # Apply the function to each point in gdf_date
-                nearest_points = gdf_date['geometry'].apply(lambda point: find_nearest(point, pixs_tree))
-                nearest_points = nearest_points.rename(columns={'geometry': 'geometry_s2'})
-                gdf_date = pd.concat([gdf_date[['date', 'lai', 'location', 'geometry']], nearest_points], axis=1)
-
-                # # Keep if less than 10m away to ensure its the right pixel
-                gdf_date['distance'] = gdf_date.apply(compute_distance, axis=1)      
-                gdf_date = gdf_date[gdf_date['distance'] <10]
-                
-                # Save lai and spectra 
-                if (len(gdf_date)):
-                    val_df = pd.concat([val_df, gdf_date[['lai', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12','geometry', 'date', 'location']]])
-                """
-                gdf_date = gdf_loc[gdf_loc['date'] == d]
-                gdf_date = gdf_date.to_crs('EPSG:32632')
-                for i, row in gdf_date.iterrows():
-                    pt = row['geometry']
-                    res = 1 # meter
-                    # Create a box with 1m side centered around pt
-                    bbox = box(pt.x - res/2, pt.y - res/2, pt.x + res/2, pt.y + res/2)
-                    projector = pyproj.Transformer.from_crs('EPSG:32632', 'EPSG:4326', always_xy=True).transform
-                    bbox = transform(projector, bbox)  
-                    try:
-                        # Clip bands to bbox
-                        scene = scene.clip_bands(clipping_bounds=bbox)
+                if s2_data.data is not None:
+                    for scene_id, scene in s2_data.data:
+                        
                         pixs = scene.to_dataframe()
-                        if len(pixs==1):
-                            df_data = pd.DataFrame([row[['date', 'lai', 'location', 'geometry']]]).reset_index(drop=True)
-                            df_data = pd.concat([pixs[['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']], df_data], axis=1)
-                            val_df = pd.concat([val_df, df_data], axis=0, ignore_index=True)
-                        else:
-                            print(f'Found multiple pixels {len(pixs)}')
-                    except:
-                        pass
+                        pixs = pixs.to_crs('EPSG:4326')
+                        
+                        # Find S2-data closest (within 10m) to validation data for that date
+                        gdf_date = gdf_loc[gdf_loc['date'] == d]
+                        gdf_date = gdf_date.to_crs(pixs.crs) # to meters, EPSG:32632
+
+                        pixs_tree = cKDTree(pixs['geometry'].apply(lambda geom: (geom.x, geom.y)).tolist())
+
+                        # Apply the function to each point in gdf_date
+                        nearest_points = gdf_date['geometry'].apply(lambda point: find_nearest(point, pixs_tree))
+                        nearest_points = nearest_points.rename(columns={'geometry': 'geometry_s2'})
+                        gdf_date = pd.concat([gdf_date[['date', 'geometry'] +trait_cols +[loc_col]], nearest_points], axis=1)
+
+                        # # Keep if less than 10m away to ensure its the right pixel
+                        gdf_date['distance'] = gdf_date.apply(compute_distance, axis=1)      
+                        gdf_date = gdf_date[gdf_date['distance'] <10]
+                        
+                        # Save lai and spectra 
+                        if len(gdf_date):
+                            val_df = pd.concat([val_df, gdf_date[['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12','geometry', 'date'] +trait_cols +[loc_col]]])
+                        
+                        """ 
+                        ## OTHER method
+                        gdf_date = gdf_loc[gdf_loc['date'] == d]
+                        gdf_date = gdf_date.to_crs('EPSG:32632')
+                        for i, row in gdf_date.iterrows():
+                            pt = row['geometry']
+                            res = 1 # meter
+                            # Create a box with 1m side centered around pt
+                            bbox = box(pt.x - res/2, pt.y - res/2, pt.x + res/2, pt.y + res/2)
+                            projector = pyproj.Transformer.from_crs('EPSG:32632', 'EPSG:4326', always_xy=True).transform
+                            bbox = transform(projector, bbox)  
+                            try:
+                                # Clip bands to bbox
+                                scene = scene.clip_bands(clipping_bounds=bbox)
+                                pixs = scene.to_dataframe()
+                                if len(pixs==1):
+                                    df_data = pd.DataFrame([row[['date', 'lai', 'location', 'geometry']]]).reset_index(drop=True)
+                                    df_data = pd.concat([pixs[['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']], df_data], axis=1)
+                                    val_df = pd.concat([val_df, df_data], axis=0, ignore_index=True)
+                                else:
+                                    print(f'Found multiple pixels {len(pixs)}')
+                            except:
+                                pass
+                        """
+
     
 
-
   # Save in-situ val data
-  data_path = base_dir.joinpath(f'results/validation_data3.pkl')
+  data_path = base_dir.joinpath(f'results/validation_data_extended.pkl')
   with open(data_path, 'wb+') as dst:
       pickle.dump(val_df, dst)
+
+
