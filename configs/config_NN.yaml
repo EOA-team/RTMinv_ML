@@ -1,6 +1,6 @@
 Model: 
     name : "NN"
-    input_size: 10
+    input_size: 4
     hidden_size: 16
     output_size: 1
     epochs: 100
@@ -15,8 +15,8 @@ Model:
 Seed: 42
 
 Data:
-    data_path : ['../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints.pkl']
-    test_data_path : '../results/validation_data.pkl'
+    data_path : ['../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints_inverse40.pkl']
+    test_data_path : '../results/validation_data_extended_lai.pkl'
     baresoil_samples : ['../results/GEE_baresoil_v2/sampled_pixels_31TGM.pkl', '../results/GEE_baresoil_v2/sampled_pixels_31TGN.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TLT.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TMT.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TNT.pkl']
     train_cols : ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']
     target_col : 'lai'   

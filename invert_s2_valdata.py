@@ -96,7 +96,7 @@ def invert_scenes(
 
 
     # Save to pickle
-    fname = data_path.split('.pkl')[0] + '_retrieved.pkl'
+    fname = data_path.split('.pkl')[0] + '_retrievednoise.pkl'
     with open(fname, 'wb') as f:
         df_data.to_pickle(f)
 
@@ -106,9 +106,9 @@ def invert_scenes(
 
 if __name__ == '__main__':
 
-    data_path = '../results/validation_data.pkl'
+    data_path = '../results/validation_data_extended_lai.pkl'
     lut_dir = Path('../results/lut_based_inversion/soil_scaled')
-    lut_paths = [lut_dir.joinpath('prosail_danner-etal_switzerland_S2A_lai-cab-ccc-car_lut_no-constraints.pkl'), lut_dir.joinpath('prosail_danner-etal_switzerland_S2B_lai-cab-ccc-car_lut_no-constraints.pkl'),]
+    lut_paths = [lut_dir.joinpath('prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints_inverse10.pkl')] #[lut_dir.joinpath('prosail_danner-etal_switzerland_S2A_lai-cab-ccc-car_lut_no-constraints.pkl'), lut_dir.joinpath('prosail_danner-etal_switzerland_S2B_lai-cab-ccc-car_lut_no-constraints.pkl'),]
     
 
     cost_functions = 'mae'
