@@ -133,8 +133,8 @@ if __name__ == '__main__':
     pickle.dump(df_noisy, f)
   """
 
-  noise_levels = [1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
-  noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined']
+  noise_levels = [60, 80, 90, 99] #[1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+  noise_types = ['inverse'] #['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined']
   cols = ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B10', 'B11', 'B12']
 
   # Load data

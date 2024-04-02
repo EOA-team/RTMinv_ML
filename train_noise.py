@@ -62,10 +62,10 @@ def test_model(config: dict) -> None:
 
 if __name__ == "__main__":
 
-    config_path = 'configs/config_GPR.yaml'
+    config_path = 'configs/config_NN.yaml'
 
-    noise_levels = [1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
-    noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
+    noise_levels = [60, 80, 90, 99] #[1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+    noise_types = ['inverse'] #['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
 
     results = {noise_type: {'rmse': [], 'std': []} for noise_type in noise_types}
 
@@ -81,7 +81,6 @@ if __name__ == "__main__":
 
         train_model(config)
         model_name, test_rmse, y_std = test_model(config_test)
-        #results.append((model_name + f'_{noise_type}{noise_level}', test_rmse, y_std))
         results[noise_type]['rmse'].append(test_rmse)
         results[noise_type]['std'].append(y_std)  
  
@@ -92,7 +91,7 @@ if __name__ == "__main__":
         data[f'{noise_type}_std'] = values['std']
 
     df_results = pd.DataFrame(data)
-    df_results.to_excel('../results/noise_results_GPR2.xlsx', index=False)
+    df_results.to_excel('../results/noise_results_NN2_fullval_highnoise.xlsx', index=False)
 
     # Plot
     plt.figure(figsize=(10, 6))
@@ -101,6 +100,6 @@ if __name__ == "__main__":
 
     plt.xlabel('Noise Level')
     plt.ylabel('Test RMSE')
-    plt.title('GPR with noise RMSE')
+    plt.title('NN with noise RMSE')
     plt.legend()
-    plt.savefig('../results/noise_plot_GPR2.png')  # Save plot as image
+    plt.savefig('../results/noise_plot_NN2_fullval_highnoise.png')  # Save plot as image
