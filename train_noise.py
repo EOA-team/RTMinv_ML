@@ -14,6 +14,8 @@ import pickle
 import pandas as pd
 import matplotlib.pyplot as plt
 import torch
+import numpy as np
+from sklearn.metrics import r2_score
 
 def test_model(config: dict) -> None:
     ''' 
@@ -57,15 +59,15 @@ def test_model(config: dict) -> None:
       if isinstance(y_test, torch.Tensor) and y_test.device.type == 'cuda':
           y_test = y_test.cpu().detach().numpy()
       test_rmse = mean_squared_error(y_test, y_pred, squared=False)
-      return model_name, test_rmse, None 
+      return model_name, test_rmse, r2_score(y_test, y_pred)
 
 
 if __name__ == "__main__":
 
-    config_path = 'configs/config_NN.yaml'
+    config_path = 'configs/config_RF.yaml'
 
-    noise_levels = [60, 80, 90, 99] #[1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
-    noise_types = ['inverse'] #['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
+    noise_levels = [1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+    noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
 
     results = {noise_type: {'rmse': [], 'std': []} for noise_type in noise_types}
 
@@ -79,7 +81,7 @@ if __name__ == "__main__":
         config['Data']['data_path'] = [f.split('.pkl')[0] + f'_{noise_type}{noise_level}.pkl' for f in config['Data']['data_path']]
         config_test = copy.deepcopy(config)
 
-        train_model(config)
+        #train_model(config)
         model_name, test_rmse, y_std = test_model(config_test)
         results[noise_type]['rmse'].append(test_rmse)
         results[noise_type]['std'].append(y_std)  
@@ -88,10 +90,10 @@ if __name__ == "__main__":
     data = {'Noise Level': noise_levels}
     for noise_type, values in results.items():
         data[f'{noise_type}_rmse'] = values['rmse']
-        data[f'{noise_type}_std'] = values['std']
+        data[f'{noise_type}_std/r2'] = values['std']
 
     df_results = pd.DataFrame(data)
-    df_results.to_excel('../results/noise_results_NN2_fullval_highnoise.xlsx', index=False)
+    df_results.to_excel('../results/noise_results_RF2_fullval.xlsx', index=False)
 
     # Plot
     plt.figure(figsize=(10, 6))
@@ -100,6 +102,6 @@ if __name__ == "__main__":
 
     plt.xlabel('Noise Level')
     plt.ylabel('Test RMSE')
-    plt.title('NN with noise RMSE')
+    plt.title('RF with noise RMSE')
     plt.legend()
-    plt.savefig('../results/noise_plot_NN2_fullval_highnoise.png')  # Save plot as image
+    plt.savefig('../results/noise_plot_RF2_fullval.png')  # Save plot as image
