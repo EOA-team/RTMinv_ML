@@ -27,15 +27,16 @@ def predict(arr: np.array, model_path: str) -> np.array:
   arr_reshaped = arr.reshape(-1, arr.shape[2]) # Reshape the image to  (width * height * date, bands)
   arr_reshaped_norm = scaler.transform(arr_reshaped)
   arr_norm = arr_reshaped_norm.reshape(arr.shape) # Reshape back to original
-
+  arr_norm[arr==0] = 0
+  
   # Make predictions 
   preds = np.zeros((arr.shape[0], arr.shape[1], arr.shape[-1])) # Initialize array to store predictions
 
-  for n in range(arr.shape[-1]):
-    for i in range(arr.shape[0]): 
-        for j in range(arr.shape[1]): 
+  for n in range(arr_norm.shape[-1]):
+    for i in range(arr_norm.shape[0]): 
+        for j in range(arr_norm.shape[1]): 
 
-            pixel_features = arr[i, j, :, n]
+            pixel_features = arr_norm[i, j, :, n]
             if pixel_features.sum() == 0:
                 # Outside of fields
                 preds[i, j, n] = 0
