@@ -45,6 +45,8 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     y = df[config['Data']['target_col']]
     X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
 
+    X_soil = pd.DataFrame()
+    y_soil = pd.Series()
     if 'baresoil_samples' in config['Data'].keys():
       baresoil_dfs = [pd.read_pickle(path) for path in config['Data']['baresoil_samples']]
       concatenated_df = pd.concat(baresoil_dfs, axis=0, ignore_index=True)
@@ -80,6 +82,8 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     y = concatenated_df[config['Data']['target_col']] #sampled_df[config['Data']['target_col']] #  
     X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
 
+    X_soil = pd.DataFrame()
+    y_soil = pd.Series()
     if 'baresoil_samples' in config['Data'].keys():
       baresoil_dfs = [pd.read_pickle(path) for path in config['Data']['baresoil_samples']]
       concatenated_df = pd.concat(baresoil_dfs, axis=0, ignore_index=True)
