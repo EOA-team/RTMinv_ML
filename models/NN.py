@@ -52,7 +52,7 @@ class NeuralNetworkRegressor(nn.Module):
       self.random_state = random_state
 
       # Define loss function and optimizer
-      self.criterion = nn.MSELoss()
+      self.criterion = nn.L1Loss() #nn.MSELoss()
       self.optim_kwargs = optim
       self.optimizer = self.get_optim(self.optim_kwargs)
 
