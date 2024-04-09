@@ -62,9 +62,57 @@ def test_model(config: dict) -> None:
       return model_name, test_rmse, r2_score(y_test, y_pred)
 
 
+def test_model_lowLAI(config: dict) -> None:
+    ''' 
+    Test model on a dataset for LAI<=3 and get scores
+
+    :param config: dictionary of configuration parameters
+    '''
+
+    #############################################
+    # DATA
+    X_test, y_test = prepare_data(config=config)
+
+    X_test = X_test[y_test > 3] #X_test[y_test <= 3]
+    y_test = y_test[y_test > 3] #y_test[y_test <= 3]
+
+    # Move data to CUDA if GPUs requested and available
+    device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
+    if device == torch.device('cuda'):
+      X_test, y_test = (
+        torch.FloatTensor(X_test).to(device),
+        torch.FloatTensor(y_test).view(-1, 1).to(device),
+      ) 
+
+    #############################################
+    # MODEL
+    save_model = config['Model'].pop('save')
+    model_name = config['Model']['name']
+    model_filename = config['Model'].pop('save_path') 
+    with open(model_filename, 'rb') as f:
+      model = pickle.load(f)
+
+    #############################################
+    # TEST
+
+    if model_name == 'GPR': # Active learning
+      y_pred, y_std = model.predict(X_test, return_std=True)
+      test_rmse = mean_squared_error(y_test, y_pred, squared=False)
+      return model_name, test_rmse, y_std.mean()
+    else: 
+      y_pred = model.predict(X_test=X_test)
+      # Move y_pred to CPU if it's on CUDA device
+      if isinstance(y_pred, torch.Tensor) and y_pred.device.type == 'cuda':
+          y_pred = y_pred.cpu().detach().numpy()
+      if isinstance(y_test, torch.Tensor) and y_test.device.type == 'cuda':
+          y_test = y_test.cpu().detach().numpy()
+      test_rmse = mean_squared_error(y_test, y_pred, squared=False)
+      return model_name, test_rmse, r2_score(y_test, y_pred)
+
+
 if __name__ == "__main__":
 
-    config_path = 'configs/config_RF.yaml'
+    config_path = 'configs/config_NN.yaml'
 
     noise_levels = [1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
     noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
@@ -82,7 +130,8 @@ if __name__ == "__main__":
         config_test = copy.deepcopy(config)
 
         #train_model(config)
-        model_name, test_rmse, y_std = test_model(config_test)
+        #model_name, test_rmse, y_std = test_model(config_test)
+        model_name, test_rmse, y_std = test_model_lowLAI(config_test)
         results[noise_type]['rmse'].append(test_rmse)
         results[noise_type]['std'].append(y_std)  
  
@@ -93,7 +142,7 @@ if __name__ == "__main__":
         data[f'{noise_type}_std/r2'] = values['std']
 
     df_results = pd.DataFrame(data)
-    df_results.to_excel('../results/noise_results_RF2_fullval.xlsx', index=False)
+    df_results.to_excel('../results/noise_results_NN_highlai.xlsx', index=False)
 
     # Plot
     plt.figure(figsize=(10, 6))
@@ -102,6 +151,6 @@ if __name__ == "__main__":
 
     plt.xlabel('Noise Level')
     plt.ylabel('Test RMSE')
-    plt.title('RF with noise RMSE')
+    plt.title('NN with noise RMSE')
     plt.legend()
-    plt.savefig('../results/noise_plot_RF2_fullval.png')  # Save plot as image
+    plt.savefig('../results/noise_results_NN_highlai.png')  # Save plot as image
