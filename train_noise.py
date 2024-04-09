@@ -125,13 +125,13 @@ if __name__ == "__main__":
 
         # Modify config: pass data with noise, change model name
         config = load_config(config_path)
-        config['Model']['save_path'] = config['Model']['save_path'].split('.pkl')[0] + f'_{noise_type}{noise_level}.pkl'
-        config['Data']['data_path'] = [f.split('.pkl')[0] + f'_{noise_type}{noise_level}.pkl' for f in config['Data']['data_path']]
+        config['Model']['save_path'] = config['Model']['save_path'].split('.pkl')[0] + f'_{noise_type}{noise_level}_noisev2.pkl'
+        config['Data']['data_path'] = [f.split('.pkl')[0] + f'_{noise_type}{noise_level}_v2.pkl' for f in config['Data']['data_path']]
         config_test = copy.deepcopy(config)
 
-        #train_model(config)
-        #model_name, test_rmse, y_std = test_model(config_test)
-        model_name, test_rmse, y_std = test_model_lowLAI(config_test)
+        train_model(config)
+        model_name, test_rmse, y_std = test_model(config_test)
+        #model_name, test_rmse, y_std = test_model_lowLAI(config_test)
         results[noise_type]['rmse'].append(test_rmse)
         results[noise_type]['std'].append(y_std)  
  
@@ -142,7 +142,7 @@ if __name__ == "__main__":
         data[f'{noise_type}_std/r2'] = values['std']
 
     df_results = pd.DataFrame(data)
-    df_results.to_excel('../results/noise_results_NN_highlai.xlsx', index=False)
+    df_results.to_excel('../results/noise_results_NN_noisev2.xlsx', index=False)
 
     # Plot
     plt.figure(figsize=(10, 6))
@@ -153,4 +153,4 @@ if __name__ == "__main__":
     plt.ylabel('Test RMSE')
     plt.title('NN with noise RMSE')
     plt.legend()
-    plt.savefig('../results/noise_results_NN_highlai.png')  # Save plot as image
+    plt.savefig('../results/noise_results_NN_noisev2.png')  # Save plot as image
