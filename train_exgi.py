@@ -68,6 +68,12 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     X_test['ndvi'] = (X_test['B08'] - X_test['B04'])/(X_test['B08'] + X_test['B04'])
     X_test = X_test[['ndvi']]
 
+    # Filter for low LAI (<3)
+    X_train = X_train[y_train < 3]
+    y_train = y_train[y_train < 3]
+    X_test = X_test[y_test < 3]
+    y_test = y_test[y_test < 3]
+
     if config['Data']['normalize']:
       scaler = MinMaxScaler()
       X_train = scaler.fit_transform(X_train) # becomes an array
@@ -119,6 +125,12 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     X_train = X_train[['ndvi']]
     X_test['ndvi'] = (X_test['B08'] - X_test['B04'])/(X_test['B08'] + X_test['B04'])
     X_test = X_test[['ndvi']]
+
+    # Filter for low LAI (<3)
+    X_train = X_train[y_train < 3]
+    y_train = y_train[y_train < 3]
+    X_test = X_test[y_test < 3]
+    y_test = y_test[y_test < 3]
 
     #print(len(X_train), len(X_test))
     if config['Data']['normalize']:
