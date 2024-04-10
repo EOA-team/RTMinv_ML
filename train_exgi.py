@@ -53,10 +53,20 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
       X_soil = concatenated_df[config['Data']['train_cols']]
       y_soil = pd.Series([0]*len(X_soil))
 
+    """
     X_train = pd.concat([X_train , X_soil], ignore_index=True)
     y_train = pd.concat([y_train , y_soil], ignore_index=True)
     X_train['exgi'] = 2*X_train['B03'] - (X_train['B04'] - X_train['B02'])
     X_train = X_train[['exgi']]
+    X_test['exgi'] = 2*X_test['B03'] - (X_test['B04'] - X_test['B02'])
+    X_test = X_test[['exgi']]
+    """
+    X_train = pd.concat([X_train , X_soil], ignore_index=True)
+    y_train = pd.concat([y_train , y_soil], ignore_index=True)
+    X_train['ndvi'] = (X_train['B08'] - X_train['B04'])/(X_train['B08'] + X_train['B04'])
+    X_train = X_train[['ndvi']]
+    X_test['ndvi'] = (X_test['B08'] - X_test['B04'])/(X_test['B08'] + X_test['B04'])
+    X_test = X_test[['ndvi']]
 
     if config['Data']['normalize']:
       scaler = MinMaxScaler()
@@ -95,10 +105,20 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     X_train = pd.concat([X_train , X_soil], ignore_index=True)
     y_train = pd.concat([pd.Series(y_train), y_soil], ignore_index=True)
 
+    """
+    X_train = pd.concat([X_train , X_soil], ignore_index=True)
+    y_train = pd.concat([y_train , y_soil], ignore_index=True)
     X_train['exgi'] = 2*X_train['B03'] - (X_train['B04'] - X_train['B02'])
     X_train = X_train[['exgi']]
     X_test['exgi'] = 2*X_test['B03'] - (X_test['B04'] - X_test['B02'])
     X_test = X_test[['exgi']]
+    """
+    X_train = pd.concat([X_train , X_soil], ignore_index=True)
+    y_train = pd.concat([y_train , y_soil], ignore_index=True)
+    X_train['ndvi'] = (X_train['B08'] - X_train['B04'])/(X_train['B08'] + X_train['B04'])
+    X_train = X_train[['ndvi']]
+    X_test['ndvi'] = (X_test['B08'] - X_test['B04'])/(X_test['B08'] + X_test['B04'])
+    X_test = X_test[['ndvi']]
 
     #print(len(X_train), len(X_test))
     if config['Data']['normalize']:
