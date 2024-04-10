@@ -56,6 +56,18 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     X_train = pd.concat([X_train , X_soil], ignore_index=True)
     y_train = pd.concat([y_train , y_soil], ignore_index=True)
 
+    if config['Model']['name'] == 'RF':
+      # Add derivatives
+      derivatives = X_train.diff(axis=1)
+      for col in X_train.columns[1:]:
+          X_train[col + '_derivative'] = derivatives[col]
+      derivatives = X_test.diff(axis=1)
+      for col in X_test.columns[1:]:
+          X_test[col + '_derivative'] = derivatives[col]
+      # Add NDVI
+      X_train['ndvi'] = (X_train['B08'] - X_train['B04'])/(X_train['B08'] + X_train['B04'])
+      X_test['ndvi'] = (X_test['B08'] - X_test['B04'])/(X_test['B08'] + X_test['B04'])
+
     if config['Data']['normalize']:
       scaler = MinMaxScaler()
       X_train = scaler.fit_transform(X_train) # becomes an array
@@ -93,6 +105,18 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     X_train = pd.concat([X_train , X_soil], ignore_index=True)
     y_train = pd.concat([pd.Series(y_train), y_soil], ignore_index=True)
 
+    if config['Model']['name'] == 'RF':
+      # Add derivatives
+      derivatives = X_train.diff(axis=1)
+      for col in X_train.columns[1:]:
+          X_train[col + '_derivative'] = derivatives[col]
+      derivatives = X_test.diff(axis=1)
+      for col in X_test.columns[1:]:
+          X_test[col + '_derivative'] = derivatives[col]
+      # Add NDVI
+      X_train['ndvi'] = (X_train['B08'] - X_train['B04'])/(X_train['B08'] + X_train['B04'])
+      X_test['ndvi'] = (X_test['B08'] - X_test['B04'])/(X_test['B08'] + X_test['B04'])
+
     #print(len(X_train), len(X_test))
     if config['Data']['normalize']:
       scaler = MinMaxScaler()
@@ -125,6 +149,8 @@ def build_model(config: dict) -> Any:
   if model_name not in MODELS:
     raise ValueError(f"Invalid model type: {model_name}")
   else:
+    #if model_name == 'NN':
+      #torch.manual_seed(config['Seed'])
     # Model hypereparameters can be set in the config, else default values used
     model_params = {key: value for key, value in config['Model'].items() if key != 'name'}  # Pass only hyperparams
     model = MODELS[model_name](**model_params)
