@@ -41,6 +41,16 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     df = pd.read_pickle(data_path)
     X = df[config['Data']['train_cols']]
     y = df[config['Data']['target_col']]
+
+    if config['Model']['name'] == 'RF':
+      # Add derivatives
+      derivatives = X.diff(axis=1)
+      for col in X.columns[1:]:
+          X[col + '_derivative'] = derivatives[col]
+      # Add NDVI
+      X['ndvi'] = (X['B08'] - X['B04'])/(X['B08'] + X['B04'])
+      
+
     if config['Data']['normalize']:
       # Load scaler
       scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl'
@@ -61,6 +71,16 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
     X = concatenated_df[config['Data']['train_cols']] #  concatenated_df[config['Data']['train_cols']]
     y = concatenated_df[config['Data']['target_col']] #  concatenated_df[config['Data']['target_col']]
+
+    if config['Model']['name'] == 'RF':
+      # Add derivatives
+      derivatives = X.diff(axis=1)
+      for col in X.columns[1:]:
+          X[col + '_derivative'] = derivatives[col]
+      # Add NDVI
+      X['ndvi'] = (X['B08'] - X['B04'])/(X['B08'] + X['B04'])
+      
+          
     if config['Data']['normalize']:
       # Load scaler
       scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl'
