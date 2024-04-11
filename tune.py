@@ -42,8 +42,13 @@ def update_config(names: tuple, values: list) -> Dict:
   for i, name in enumerate(names):
     if name=='lr':
       config['Model']['optim']['lr'] = values[i]
+    elif name=='optim':
+      config['Model']['optim']['name'] = values[i]
     else:
       config['Model'][name] = values[i]
+  
+  # Temporarily save the model and scaler to use during testing
+  config['Model']['save_path'] = config['Model']['save_path'].split('.pkl')[0] + '_tmp.pkl'
   
   return config
 
@@ -83,6 +88,8 @@ def tune_model(config: dict) -> None:
 
     # Iterate over hyperparameter combinations
     for hyperparam_values in hyperparam_combinations:
+      print('\n'.join([f'Training with hyperparameters ' + ', '.join([f'{key}: {value}' for key, value in zip(hyperparam_grid.keys(), hyperparam_values)])]))
+
       # Update the hyperparameters in the config
       config = update_config(hyperparam_grid.keys(), hyperparam_values)
     
@@ -94,6 +101,10 @@ def tune_model(config: dict) -> None:
       train_cmd = ['python', 'train.py', temp_config_path]
       process = run(train_cmd, stdout=PIPE, stderr=PIPE, universal_newlines=True)
 
+      # Call test.py (to test on validation set) with the updated config
+      test_cmd = ['python', 'test.py', temp_config_path]
+      process = run(test_cmd, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+
       # Extract the test score from the output
       error_lines = process.stderr.split('\n')
       output_lines = process.stdout.split('\n')
@@ -104,6 +115,11 @@ def tune_model(config: dict) -> None:
       row_dict = {h: hyperparam_values[i] for i, h in enumerate(hyperparam_grid.keys())}
       row_dict['Test_RMSE'] = test_rmse
       writer.writerow(row_dict)
+
+      # Delete the temporary saved model and scaler
+      os.remove(config['Model']['save_path'])
+      os.remove(config['Model']['save_path'].split('.')[0] + '_scaler.pkl')
+
   
   # Delete the temporary config file
   os.remove(temp_config_path)

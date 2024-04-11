@@ -31,7 +31,7 @@ class SimpleNeuralNetwork(nn.Module):
 
 class NeuralNetworkRegressor(nn.Module):
   def __init__(self, input_size, hidden_size, output_size, epochs=100, batch_size=32, 
-  optim={'name': 'Adam', 'learning_rate': 0.01}, random_state=42):
+  optim={'name': 'Adam', 'learning_rate': 0.01}, criterion=nn.MSELoss(), random_state=42):
       '''
       Neural Network regressor model
 
@@ -52,9 +52,26 @@ class NeuralNetworkRegressor(nn.Module):
       self.random_state = random_state
 
       # Define loss function and optimizer
-      self.criterion = nn.L1Loss() #nn.MSELoss()
       self.optim_kwargs = optim
       self.optimizer = self.get_optim(self.optim_kwargs)
+      self.criterion = self.get_criterion(criterion) # nn.L1Loss() , nn.MSELoss()  
+
+
+  def get_criterion(self, criterion: str) -> optim:
+      ''' 
+      Initialise optimizer criterion for the model training
+
+      :param criterion: str with crtierion name
+      See torch.nn documentation for options and details
+      :returns: Instatiated loss function for the optimizer
+      '''
+
+      if criterion == 'MSE':
+        return nn.MSELoss()
+      if criterion == 'L1':
+        return nn.L1Loss()
+      else:
+        raise Exception(f'Criterion {criterion} not implemented, please select another')
 
 
   def get_optim(self, optim_kwargs: dict) -> optim:
