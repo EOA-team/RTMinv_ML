@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.model_selection import KFold
 import pandas as pd
 import numpy as np
@@ -158,9 +158,13 @@ class NeuralNetworkRegressor(nn.Module):
       if isinstance(y_test, torch.Tensor) and y_test.device.type == 'cuda':
           y_test = y_test.cpu().detach().numpy()
 
-      # Compute RMSE on the test set
+      # Compute different scores on the test set
       test_rmse = mean_squared_error(y_test, y_pred, squared=False)
+      test_mae = mean_absolute_error(y_test, y_pred)
+      test_r2 = r2_score(y_test, y_pred)
       print(f'Test RMSE: {test_rmse}')
+      print(f'Test MAE: {test_mae}')
+      print(f'Test R2: {test_r2}')
 
   def save(self, model, model_filename: str) -> None:
       ''' 

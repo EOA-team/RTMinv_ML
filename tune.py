@@ -47,9 +47,6 @@ def update_config(names: tuple, values: list) -> Dict:
     else:
       config['Model'][name] = values[i]
   
-  # Temporarily save the model and scaler to use during testing
-  config['Model']['save_path'] = config['Model']['save_path'].split('.pkl')[0] + '_tmp.pkl'
-  
   return config
 
 
@@ -75,6 +72,9 @@ def tune_model(config: dict) -> None:
   hyperparam_grid = config['Grid']
   hyperparam_combinations = list(itertools.product(*hyperparam_grid.values()))
 
+  # Temporarily save the model and scaler to use during testing
+  config['Model']['save_path'] = config['Model']['save_path'].split('.pkl')[0] + '_tmp.pkl'
+
   # Create a directory to store results
   results_dir = 'tuning_results/'
   os.makedirs(results_dir, exist_ok=True)
@@ -82,7 +82,7 @@ def tune_model(config: dict) -> None:
   # Open a CSV file to store the results
   results_file = os.path.join(results_dir, config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_tuning.csv')
   with open(results_file, 'w', newline='') as csvfile:
-    fieldnames = list(hyperparam_grid.keys()) +['Test_RMSE']
+    fieldnames = list(hyperparam_grid.keys()) +['Test_RMSE', 'Test_MAE', 'Test_R2']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -110,13 +110,20 @@ def tune_model(config: dict) -> None:
       output_lines = process.stdout.split('\n')
       test_rmse_line = [line for line in output_lines if 'Test RMSE' in line]
       test_rmse = float(test_rmse_line[0].split(': ')[1]) if test_rmse_line else None
+      test_mae_line = [line for line in output_lines if 'Test MAE' in line]
+      test_mae = float(test_mae_line[0].split(': ')[1]) if test_mae_line else None
+      test_r2_line = [line for line in output_lines if 'Test R2' in line]
+      test_r2 = float(test_r2_line[0].split(': ')[1]) if test_r2_line else None
 
       # Write the results to the CSV file
       row_dict = {h: hyperparam_values[i] for i, h in enumerate(hyperparam_grid.keys())}
       row_dict['Test_RMSE'] = test_rmse
+      row_dict['Test_MAE'] = test_mae
+      row_dict['Test_R2'] = test_r2
       writer.writerow(row_dict)
 
       # Delete the temporary saved model and scaler
+      print(config['Model']['save_path'])
       os.remove(config['Model']['save_path'])
       os.remove(config['Model']['save_path'].split('.')[0] + '_scaler.pkl')
 
