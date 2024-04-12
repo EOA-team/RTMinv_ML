@@ -31,7 +31,7 @@ class SimpleNeuralNetwork(nn.Module):
 
 class NeuralNetworkRegressor(nn.Module):
   def __init__(self, input_size, hidden_size, output_size, epochs=100, batch_size=32, 
-  optim={'name': 'Adam', 'learning_rate': 0.01}, criterion=nn.MSELoss(), random_state=42):
+  optim={'name': 'Adam', 'learning_rate': 0.01}, criterion='MSE', random_state=42):
       '''
       Neural Network regressor model
 
