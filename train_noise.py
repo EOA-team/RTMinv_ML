@@ -7,8 +7,8 @@ Pass multiple config files and call the training script for each model
 import os
 import yaml
 from train import load_config, train_model
-from test import prepare_data
-from sklearn.metrics import mean_squared_error
+from test import prepare_data_test
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 import copy 
 import pickle
 import pandas as pd
@@ -26,7 +26,7 @@ def test_model(config: dict) -> None:
 
     #############################################
     # DATA
-    X_test, y_test = prepare_data(config=config)
+    X_test, y_test = prepare_data_test(config=config)
 
     # Move data to CUDA if GPUs requested and available
     device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
@@ -59,7 +59,9 @@ def test_model(config: dict) -> None:
       if isinstance(y_test, torch.Tensor) and y_test.device.type == 'cuda':
           y_test = y_test.cpu().detach().numpy()
       test_rmse = mean_squared_error(y_test, y_pred, squared=False)
-      return model_name, test_rmse, r2_score(y_test, y_pred)
+      test_mae = mean_absolute_error(y_test, y_pred)
+      slope, intercept = np.polyfit(y_test, y_pred, 1)
+      return model_name, test_rmse, test_mae, r2_score(y_test, y_pred), slope[0], intercept[0]
 
 
 def test_model_lowLAI(config: dict) -> None:
@@ -114,10 +116,10 @@ if __name__ == "__main__":
 
     config_path = 'configs/config_NN.yaml'
 
-    noise_levels = [1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+    noise_levels = [1, 3, 5, 10, 15, 20]
     noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
 
-    results = {noise_type: {'rmse': [], 'std': []} for noise_type in noise_types}
+    results = {noise_type: {'rmse': [], 'std': [], 'slope': [], 'intercept': []} for noise_type in noise_types}
 
     for noise_type in noise_types:
       for noise_level in noise_levels:
@@ -130,16 +132,21 @@ if __name__ == "__main__":
         config_test = copy.deepcopy(config)
 
         train_model(config)
-        model_name, test_rmse, y_std = test_model(config_test)
+        model_name, test_rmse, test_mae, y_std, slope, intercept = test_model(config_test)
         #model_name, test_rmse, y_std = test_model_lowLAI(config_test)
         results[noise_type]['rmse'].append(test_rmse)
         results[noise_type]['std'].append(y_std)  
+        results[noise_type]['slope'].append(slope)  
+        results[noise_type]['intercept'].append(intercept)  
  
     # Save results to Excel
     data = {'Noise Level': noise_levels}
     for noise_type, values in results.items():
         data[f'{noise_type}_rmse'] = values['rmse']
         data[f'{noise_type}_std/r2'] = values['std']
+        data[f'{noise_type}_std/r2'] = values['std']
+        data[f'{noise_type}_slope'] = values['slope']
+        data[f'{noise_type}_intercept'] = values['intercept']
 
     df_results = pd.DataFrame(data)
     df_results.to_excel('../results/noise_results_NN_noisev2.xlsx', index=False)

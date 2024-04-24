@@ -15,6 +15,27 @@ import numpy as np
 import pickle
 
 
+ 
+class SimpleNeuralNetwork(nn.Module):
+  def __init__(self, input_size, hidden_size, hidden_layers, output_size):
+    super(SimpleNeuralNetwork, self).__init__()
+    self.hidden_layers = nn.ModuleList()
+
+    # Add hidden layers
+    for _ in range(hidden_layers):
+        self.hidden_layers.append(nn.Linear(input_size, hidden_size))
+        self.hidden_layers.append(nn.ReLU())
+        input_size = hidden_size  # Update input size for the next layer
+    
+    # Add the output layer
+    self.output_layer = nn.Linear(hidden_size, output_size)
+
+  def forward(self, x):
+    for layer in self.hidden_layers:
+        x = layer(x)
+    return self.output_layer(x)
+"""
+
 class SimpleNeuralNetwork(nn.Module):
   def __init__(self, input_size, hidden_size, output_size):
     super(SimpleNeuralNetwork, self).__init__()
@@ -28,15 +49,17 @@ class SimpleNeuralNetwork(nn.Module):
     x = self.relu(x)
     x = self.fc2(x)
     return x
+"""
 
 class NeuralNetworkRegressor(nn.Module):
-  def __init__(self, input_size, hidden_size, output_size, epochs=100, batch_size=32, 
+  def __init__(self, input_size, hidden_size, hidden_layer, output_size, epochs=100, batch_size=32, 
   optim={'name': 'Adam', 'learning_rate': 0.01}, criterion='MSE', random_state=42):
       '''
       Neural Network regressor model
 
       :param input_size: number of features in the input data
       :param hidden_size: number of neurons in the hidden layer
+      :param hidden_layer: number of hidden layers
       :param output_size: number of neurons in the output layer
       :param learning_rate: learning rate for optimization
       :param epochs: number of training epochs
@@ -46,7 +69,7 @@ class NeuralNetworkRegressor(nn.Module):
       '''
       super(NeuralNetworkRegressor, self).__init__()
 
-      self.model = SimpleNeuralNetwork(input_size, hidden_size, output_size)
+      self.model = SimpleNeuralNetwork(input_size, hidden_size, hidden_layer, output_size)
       self.epochs = epochs
       self.batch_size = batch_size
       self.random_state = random_state
@@ -145,12 +168,13 @@ class NeuralNetworkRegressor(nn.Module):
 
       return predictions
 
-  def test_scores(self, y_test: pd.Series, y_pred: np.array):
+  def test_scores(self, y_test: pd.Series, y_pred: np.array, dataset: str):
       '''
       Compute scores on the test set
 
       :param y_test: test labels
       :param y_pred: test predictions
+      :param dataset: dataset name
       '''
       # Move y_pred to CPU if it's on CUDA device
       if isinstance(y_pred, torch.Tensor) and y_pred.device.type == 'cuda':
@@ -162,9 +186,12 @@ class NeuralNetworkRegressor(nn.Module):
       test_rmse = mean_squared_error(y_test, y_pred, squared=False)
       test_mae = mean_absolute_error(y_test, y_pred)
       test_r2 = r2_score(y_test, y_pred)
-      print(f'Test RMSE: {test_rmse}')
-      print(f'Test MAE: {test_mae}')
-      print(f'Test R2: {test_r2}')
+      slope, intercept = np.polyfit(y_test, y_pred, 1)
+      print(f'{dataset} RMSE: {test_rmse}')
+      print(f'{dataset} MAE: {test_mae}')
+      print(f'{dataset} R2: {test_r2}')
+      print('Regression slope:', slope[0])
+      print('Regression intercept:', intercept[0])
 
   def save(self, model, model_filename: str) -> None:
       ''' 
