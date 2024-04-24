@@ -6,7 +6,7 @@ Ridge Regression model to perform a RTM inversion
 
 from sklearn.model_selection import cross_val_score, KFold
 from sklearn.linear_model import Ridge
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import pandas as pd
 from typing import Optional
 import pickle
@@ -84,16 +84,24 @@ class RidgeReg(Ridge):
         return super().predict(X_test)
 
 
-    def test_scores(self, y_test: np.array, y_pred: np.array) -> None:
+    def test_scores(self, y_test: np.array, y_pred: np.array, dataset: str) -> None:
         '''
         Compute scores on the test set
 
         :param y_test: Test labels
         :param y_pred: Test predictions
         '''
-        # Compute RMSE on the test set
+        # Compute different scores on the test set
         test_rmse = mean_squared_error(y_test, y_pred, squared=False)
-        print(f'Test RMSE: {test_rmse}')
+        test_mae = mean_absolute_error(y_test, y_pred)
+        test_r2 = r2_score(y_test, y_pred)
+        slope, intercept = np.polyfit(y_test, y_pred, 1)
+        print(f'{dataset} RMSE: {test_rmse}')
+        print(f'{dataset} MAE: {test_mae}')
+        print(f'{dataset} R2: {test_r2}')
+        print(f'{dataset} slope: {slope}')
+        print(f'{dataset} intercept: {intercept}')
+
 
     def save(self, model, model_filename: str) -> None:
         ''' 
