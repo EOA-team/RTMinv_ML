@@ -165,6 +165,10 @@ def train_model(config: dict) -> None:
 
   :param config: dictionary of configuration parameters
   '''
+
+  torch.manual_seed(config['Seed'])
+  np.random.seed(config['Seed'])
+
   #############################################
   # DATA
   X_train, X_test, y_train, y_test = prepare_data(config=config)
@@ -206,7 +210,7 @@ def train_model(config: dict) -> None:
     #############################################
     # TEST 
     y_pred = model.predict(X_test=X_test)
-    model.test_scores(y_test=y_test, y_pred=y_pred)
+    model.test_scores(y_test=y_test, y_pred=y_pred, dataset='Test')
 
   #############################################
   # SAVE 

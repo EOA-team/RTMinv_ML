@@ -28,9 +28,109 @@ def load_config(config_path: str) -> Dict:
   return config
 
 
-def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.array], None]:
+def prepare_data_train(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.array], None]:
   ''' 
-  Load data and prepare training and testing sets
+  Load data and prepare training sets
+
+  :param config: dictionary of configuration parameters
+  :returns: X pd.DataFrame and y pd.Series for training and test sets 
+  '''
+  data_path = config['Data']['data_path']
+
+  if isinstance(data_path, str):
+    df = pd.read_pickle(data_path)
+    X = df[config['Data']['train_cols']]
+    y = df[config['Data']['target_col']]
+    X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
+
+    X_soil = pd.DataFrame()
+    y_soil = pd.Series()
+    if 'baresoil_samples' in config['Data'].keys():
+      baresoil_dfs = [pd.read_pickle(path) for path in config['Data']['baresoil_samples']]
+      concatenated_df = pd.concat(baresoil_dfs, axis=0, ignore_index=True)
+      X_soil = concatenated_df[config['Data']['train_cols']]
+      y_soil = pd.Series([0]*len(X_soil))
+
+    X_train = pd.concat([X_train , X_soil], ignore_index=True)
+    y_train = pd.concat([y_train , y_soil], ignore_index=True)
+
+    if config['Model']['name'] == 'RF':
+      # Add derivatives
+      derivatives = X_train.diff(axis=1)
+      for col in X_train.columns[1:]:
+          X_train[col + '_derivative'] = derivatives[col]
+      derivatives = X_test.diff(axis=1)
+      for col in X_test.columns[1:]:
+          X_test[col + '_derivative'] = derivatives[col]
+      # Add NDVI
+      X_train['ndvi'] = (X_train['B08'] - X_train['B04'])/(X_train['B08'] + X_train['B04'])
+      X_test['ndvi'] = (X_test['B08'] - X_test['B04'])/(X_test['B08'] + X_test['B04'])
+
+    if config['Data']['normalize']:
+      # Load scaler
+      scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl'
+      with open(scaler_path, 'rb') as f:
+        scaler = pickle.load(f)
+      # Normalize
+      X_train = scaler.transform(X_train)
+      X_test = scaler.transform(X_test)
+      return X_train, X_test, y_train, y_test
+    else:
+      return X_train.values, X_test.values, y_train, y_test
+
+  elif isinstance(data_path, list):
+    # Assuming all files in the list are pickled DataFrames
+    dfs = [pd.read_pickle(path) for path in data_path]
+    concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
+    # Sample 50000 data pairs
+    #sampled_df = concatenated_df.sample(50000, random_state=config['Seed']) if len(concatenated_df) > 50000 else concatenated_df
+    X = concatenated_df[config['Data']['train_cols']] #sampled_df[config['Data']['train_cols']] #
+    y = concatenated_df[config['Data']['target_col']] #sampled_df[config['Data']['target_col']] #  
+    X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
+
+    X_soil = pd.DataFrame()
+    y_soil = pd.Series()
+    if 'baresoil_samples' in config['Data'].keys():
+      baresoil_dfs = [pd.read_pickle(path) for path in config['Data']['baresoil_samples']]
+      concatenated_df = pd.concat(baresoil_dfs, axis=0, ignore_index=True)
+      X_soil = concatenated_df[config['Data']['train_cols']]
+      y_soil = pd.Series([0]*len(X_soil))
+    
+    X_train = pd.concat([X_train , X_soil], ignore_index=True)
+    y_train = pd.concat([pd.Series(y_train), y_soil], ignore_index=True)
+
+    if config['Model']['name'] == 'RF':
+      # Add derivatives
+      derivatives = X_train.diff(axis=1)
+      for col in X_train.columns[1:]:
+          X_train[col + '_derivative'] = derivatives[col]
+      derivatives = X_test.diff(axis=1)
+      for col in X_test.columns[1:]:
+          X_test[col + '_derivative'] = derivatives[col]
+      # Add NDVI
+      X_train['ndvi'] = (X_train['B08'] - X_train['B04'])/(X_train['B08'] + X_train['B04'])
+      X_test['ndvi'] = (X_test['B08'] - X_test['B04'])/(X_test['B08'] + X_test['B04'])
+
+    #print(len(X_train), len(X_test))
+    if config['Data']['normalize']:
+      # Load scaler
+      scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl'
+      with open(scaler_path, 'rb') as f:
+        scaler = pickle.load(f)
+      # Normalize
+      X_train = scaler.transform(X_train)
+      X_test = scaler.transform(X_test)
+      return X_train, X_test, y_train, y_test
+    else:
+      return X_train.values, X_test.values, y_train, y_test
+
+  else:
+      return None
+
+
+def prepare_data_test(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.array], None]:
+  ''' 
+  Load data and prepare test sets
 
   :param config: dictionary of configuration parameters
   :returns: X pd.DataFrame and y pd.Series for training and test sets 
@@ -124,7 +224,8 @@ def test_model(config: dict) -> None:
 
   #############################################
   # DATA
-  X_test, y_test = prepare_data(config=config)
+  X_test, y_test = prepare_data_test(config=config) # unseen validation data (in situ)
+  _, X_train, _, y_train = prepare_data_train(config=config) # performance on training data
 
   #############################################
   # MODEL
@@ -142,7 +243,9 @@ def test_model(config: dict) -> None:
     model.test_scores(y_test=y_test, y_pred=y_pred)
   else: 
     y_pred = model.predict(X_test=X_test)
-    model.test_scores(y_test=y_test, y_pred=y_pred)
+    model.test_scores(y_test=y_test, y_pred=y_pred, dataset='Test') 
+    y_pred = model.predict(X_test=X_train)
+    model.test_scores(y_test=y_train, y_pred=y_pred, dataset='Train') 
 
   return
 
