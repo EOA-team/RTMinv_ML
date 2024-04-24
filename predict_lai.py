@@ -24,9 +24,11 @@ def predict(arr: np.array, model_path: str) -> np.array:
     scaler = pickle.load(f)
   
   # Normalise the data
-  arr_reshaped = arr.reshape(-1, arr.shape[2]) # Reshape the image to  (width * height * date, bands)
+  arr_reshaped = arr.transpose((0,1,3,2)).reshape(-1, arr.shape[2]) # Reshape the image to  (width * height * date, bands)
   arr_reshaped_norm = scaler.transform(arr_reshaped)
-  arr_norm = arr_reshaped_norm.reshape(arr.shape) # Reshape back to original
+  # Reshape back to original
+  arr_shape = (arr.shape[0], arr.shape[1], arr.shape[3], arr.shape[2])
+  arr_norm = arr_reshaped_norm.reshape(arr_shape).transpose((0,1,3,2))
   arr_norm[arr==0] = 0
   
   # Make predictions 
