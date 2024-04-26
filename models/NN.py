@@ -15,7 +15,7 @@ import numpy as np
 import pickle
 
 
- 
+
 class SimpleNeuralNetwork(nn.Module):
   def __init__(self, input_size, hidden_size, hidden_layers, output_size):
     super(SimpleNeuralNetwork, self).__init__()
