@@ -13,6 +13,7 @@ from argparse import ArgumentParser
 import yaml
 from typing import Dict, Tuple, Union, Any
 import pickle
+import torch
 
 from models import MODELS
 
@@ -227,6 +228,18 @@ def test_model(config: dict) -> None:
   X_test, y_test = prepare_data_test(config=config) # unseen validation data (in situ)
   _, X_train, _, y_train = prepare_data_train(config=config) # performance on training data
 
+  # Move data to CUDA if GPUs requested and available
+  device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
+  if device == torch.device('cuda'):
+      X_test, y_test = (
+          torch.FloatTensor(X_test).to(device),
+          torch.FloatTensor(y_test).view(-1, 1).to(device)
+      )
+      X_train, y_train = (
+          torch.FloatTensor(X_train).to(device),
+          torch.FloatTensor(y_train).view(-1, 1).to(device)
+      )
+
   #############################################
   # MODEL
   save_model = config['Model'].pop('save')
@@ -234,6 +247,10 @@ def test_model(config: dict) -> None:
   model_filename = config['Model'].pop('save_path') 
   with open(model_filename, 'rb') as f:
     model = pickle.load(f)
+
+  # Move model to CUDA if GPUs are available
+  if device == torch.device('cuda'):
+      model.to(device)
 
   #############################################
   # TEST

@@ -2,16 +2,17 @@ Model:
     name : "NN"
     input_size: 10
     hidden_size: 16
-    hidden_layer: 1
+    hidden_layer: 2
     output_size: 1
     epochs: 100
-    batch_size: 8
+    batch_size: 16
+    criterion: 'L1'
     optim: 
         name: Adam
         lr: 0.01
     save: True
-    save_path: 'trained_models/NN_soil22_inverse1_noisev2_tuned.pkl'
-    gpu : True
+    save_path: 'trained_models/NN_soil22_inverse1_noisev2.pkl'
+    gpu : False
 
 Seed: 10
 

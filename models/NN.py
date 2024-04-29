@@ -186,12 +186,14 @@ class NeuralNetworkRegressor(nn.Module):
       test_rmse = mean_squared_error(y_test, y_pred, squared=False)
       test_mae = mean_absolute_error(y_test, y_pred)
       test_r2 = r2_score(y_test, y_pred)
-      slope, intercept = np.polyfit(y_test, y_pred, 1)
+      slope, intercept = np.polyfit(y_test.flatten(), y_pred.flatten(), 1)
+      rmselow = mean_squared_error(y_test[y_test<3], y_pred[y_test<3], squared=False)
       print(f'{dataset} RMSE: {test_rmse}')
       print(f'{dataset} MAE: {test_mae}')
       print(f'{dataset} R2: {test_r2}')
-      print('Regression slope:', slope[0])
-      print('Regression intercept:', intercept[0])
+      print('Regression slope:', slope)
+      print('Regression intercept:', intercept)
+      print(f'{dataset} rmselow: {rmselow}')
 
   def save(self, model, model_filename: str) -> None:
       ''' 

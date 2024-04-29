@@ -82,7 +82,7 @@ def tune_model(config: dict) -> None:
   # Open a CSV file to store the results
   results_file = os.path.join(results_dir, config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_tuning.csv')
   with open(results_file, 'w', newline='') as csvfile:
-    fieldnames = list(hyperparam_grid.keys()) +['Test_RMSE', 'Test_MAE', 'Test_R2', 'Test_slope', 'Test_int', 'Test_rmselow']
+    fieldnames = list(hyperparam_grid.keys()) +['Test_RMSE', 'Test_MAE', 'Test_R2', 'slope', 'int', 'Test_rmselow']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -114,11 +114,11 @@ def tune_model(config: dict) -> None:
       test_mae = float(test_mae_line[0].split(': ')[1]) if test_mae_line else None
       test_r2_line = [line for line in output_lines if 'Test R2' in line]
       test_r2 = float(test_r2_line[0].split(': ')[1]) if test_r2_line else None
-      test_slope_line = [line for line in output_lines if 'Test slope' in line]
+      test_slope_line = [line for line in output_lines if 'Regression slope' in line]
       test_slope = float(test_slope_line[0].split(': ')[1]) if test_slope_line else None
-      test_int_line = [line for line in output_lines if 'Test intercept' in line]
+      test_int_line = [line for line in output_lines if 'Regression intercept' in line]
       test_int = float(test_int_line[0].split(': ')[1]) if test_int_line else None
-      test_rmselow_line = [line for line in output_lines if 'Test rmse_low' in line]
+      test_rmselow_line = [line for line in output_lines if 'Test rmselow' in line]
       test_rmselow = float(test_rmselow_line[0].split(': ')[1]) if test_rmselow_line else None
 
       # Write the results to the CSV file
@@ -126,8 +126,8 @@ def tune_model(config: dict) -> None:
       row_dict['Test_RMSE'] = test_rmse
       row_dict['Test_MAE'] = test_mae
       row_dict['Test_R2'] = test_r2
-      row_dict['Test_slope'] = test_slope
-      row_dict['Test_int'] = test_int
+      row_dict['slope'] = test_slope
+      row_dict['int'] = test_int
       row_dict['Test_rmselow'] = test_rmselow
       writer.writerow(row_dict)
 
