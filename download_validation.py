@@ -380,8 +380,6 @@ if __name__ == '__main__':
                                 pass
                         """
 
-        break
-
   # Save in-situ val data
   data_path = base_dir.joinpath(f'results/validation_data_extended_angles.pkl')
   with open(data_path, 'wb+') as dst:
