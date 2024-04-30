@@ -16,6 +16,7 @@ from eodal.core.sensors.sentinel2 import Sentinel2
 from eodal.mapper.feature import Feature
 from eodal.mapper.filter import Filter
 from eodal.mapper.mapper import Mapper, MapperConfigs
+from eodal.metadata.sentinel2.parsing import parse_MTD_TL
 
 Settings = get_settings()
 # set to False to use a local data archive
@@ -34,7 +35,37 @@ from pyproj import Proj
 import pyproj
 from shapely.ops import transform
 import pickle
+import tempfile
+import urllib
+import uuid
+import planetary_computer
+from scipy.interpolate import interp2d
 
+
+
+
+def angles_from_mspc(url: str):
+    """
+    Extract viewing and illumination angles from MS Planetary Computer
+    metadata XML (this is a work-around until STAC provides the angles
+    directly)
+
+    :param url:
+        URL to the metadata XML file
+    :returns:
+        extracted angles as dictionary
+    """
+    response = urllib.request.urlopen(planetary_computer.sign_url(url)).read()
+    temp_file = os.path.join(tempfile.gettempdir(), f'{uuid.uuid4()}.xml')
+    with open(temp_file, 'wb') as dst:
+        dst.write(response)
+
+    metadata = parse_MTD_TL(in_file=temp_file)
+    # get sensor zenith and azimuth angle
+    sensor_angles = ['SENSOR_ZENITH_ANGLE', 'SENSOR_AZIMUTH_ANGLE']
+    sensor_angle_dict = {
+        k: v for k, v in metadata.items() if k in sensor_angles}
+    return sensor_angle_dict
 
 
 def preprocess_sentinel2_scenes(
@@ -121,6 +152,25 @@ def extract_s2_data(
 
     # query the STAC (looks for available scenes in the selected spatio-temporal range)
     mapper.query_scenes()
+    
+    if len(mapper.metadata): 
+        # extract the angular information about the sensor (still not
+        # part of the default STAC metadata). Since it's only a work-
+        # around it's a bit slow...
+        mapper.metadata['href_xml'] = mapper.metadata.assets.apply(
+            lambda x: x['granule-metadata']['href']
+        )
+        mapper.metadata['sensor_angles'] = mapper.metadata['href_xml'].apply(
+            lambda x, angles_from_mspc=angles_from_mspc: angles_from_mspc(x)
+        )
+        mapper.metadata['sensor_zenith_angle'] = \
+            mapper.metadata['sensor_angles'].apply(
+                lambda x: x['SENSOR_ZENITH_ANGLE'])
+
+        mapper.metadata['sensor_azimuth_angle'] = \
+            mapper.metadata['sensor_angles'].apply(
+                lambda x: x['SENSOR_AZIMUTH_ANGLE'])
+
 
     # get observations (loads the actual Sentinel2 scenes)
     # the data is extract for the extent of the parcel
@@ -158,6 +208,9 @@ def extract_s2_data(
         # delete scenes containing only no-data
         for scene_id in scenes_to_del:
             del mapper.data[scene_id]
+        # Keep only metadata for corresponding scenes
+        dates_to_del = [scene_id.date() for scene_id in scenes_to_del]
+        mapper.metadata = mapper.metadata[~mapper.metadata['sensing_date'].isin(dates_to_del)]
 
     
     return mapper
@@ -241,7 +294,6 @@ if __name__ == '__main__':
   for insitu_path in insitu_paths:
     gdf, loc_col, trait_cols = load_data(str(insitu_path))
     locations = gdf[loc_col].unique()
-
     
     # Loop over dates of val data
     # Query s2 data for those dates
@@ -293,10 +345,15 @@ if __name__ == '__main__':
                         # # Keep if less than 10m away to ensure its the right pixel
                         gdf_date['distance'] = gdf_date.apply(compute_distance, axis=1)      
                         gdf_date = gdf_date[gdf_date['distance'] <10]
+
+                        # Add data on sun/sensor angles
+                        gdf_date['view_zenith'] = s2_data.metadata['sensor_zenith_angle'].values[0]
+                        gdf_date['sun_zenith'] = s2_data.metadata['sun_zenith_angle'].values[0]
+                        gdf_date["relative_azimuth"] = (s2_data.metadata["sun_azimuth_angle"].values[0] - s2_data.metadata["sensor_azimuth_angle"].values[0])%360
                         
                         # Save lai and spectra 
                         if len(gdf_date):
-                            val_df = pd.concat([val_df, gdf_date[['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12','geometry', 'date'] +trait_cols +[loc_col]]])
+                            val_df = pd.concat([val_df, gdf_date[['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12','geometry', 'date', 'view_zenith', 'sun_zenith', 'relative_azimuth'] +trait_cols +[loc_col]]])
                         
                         """ 
                         ## OTHER method
@@ -323,10 +380,10 @@ if __name__ == '__main__':
                                 pass
                         """
 
-    
+        break
 
   # Save in-situ val data
-  data_path = base_dir.joinpath(f'results/validation_data_extended.pkl')
+  data_path = base_dir.joinpath(f'results/validation_data_extended_angles.pkl')
   with open(data_path, 'wb+') as dst:
       pickle.dump(val_df, dst)
 
