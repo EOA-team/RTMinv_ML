@@ -62,7 +62,12 @@ def test_model(config: dict) -> None:
       test_mae = mean_absolute_error(y_test, y_pred)
       slope, intercept = np.polyfit(y_test, y_pred, 1)
       rmse_low = mean_squared_error(y_test[y_test<3], y_pred[y_test<3], squared=False)
-      return model_name, test_rmse, test_mae, r2_score(y_test, y_pred), slope[0], intercept[0], rmse_low
+
+      # Fabio score
+      fabio = abs(np.mean(y_test-y_pred)) + np.std(y_test-y_pred) - np.sqrt(np.cov(y_test, y_pred.flatten())[0,1])
+      fabio2 = abs(np.mean(y_test-y_pred)) + np.std(y_test-y_pred)
+
+      return model_name, test_rmse, test_mae, r2_score(y_test, y_pred), slope[0], intercept[0], rmse_low, fabio, fabio2
 
 
 def test_model_lowLAI(config: dict) -> None:
@@ -120,7 +125,7 @@ if __name__ == "__main__":
     noise_levels = [1, 3, 5, 10, 15, 20]
     noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
 
-    results = {noise_type: {'rmse': [], 'std': [], 'slope': [], 'intercept': [], 'rmselow': []} for noise_type in noise_types}
+    results = {noise_type: {'rmse': [], 'std': [], 'slope': [], 'intercept': [], 'rmselow': [], 'fabio': [], 'fabio2': []} for noise_type in noise_types}
 
     for noise_type in noise_types:
       for noise_level in noise_levels:
@@ -133,13 +138,15 @@ if __name__ == "__main__":
         config_test = copy.deepcopy(config)
 
         #train_model(config)
-        model_name, test_rmse, test_mae, y_std, slope, intercept, rmse_low = test_model(config_test)
+        model_name, test_rmse, test_mae, y_std, slope, intercept, rmse_low, fabio, fabio2 = test_model(config_test)
         #model_name, test_rmse, y_std = test_model_lowLAI(config_test)
         results[noise_type]['rmse'].append(test_rmse)
         results[noise_type]['std'].append(y_std)  
         results[noise_type]['slope'].append(slope)  
         results[noise_type]['intercept'].append(intercept)  
-        results[noise_type]['rmselow'].append(rmse_low)  
+        results[noise_type]['rmselow'].append(rmse_low)
+        results[noise_type]['fabio'].append(fabio) 
+        results[noise_type]['fabio2'].append(fabio2)  
  
     # Save results to Excel
     data = {'Noise Level': noise_levels}
@@ -150,6 +157,8 @@ if __name__ == "__main__":
         data[f'{noise_type}_slope'] = values['slope']
         data[f'{noise_type}_intercept'] = values['intercept']
         data[f'{noise_type}_rmselow'] = values['rmselow']
+        data[f'{noise_type}_fabio'] = values['fabio']
+        data[f'{noise_type}_fabio2'] = values['fabio2']
 
     df_results = pd.DataFrame(data)
     df_results.to_excel('../results/noise_results_NN_noisev2.xlsx', index=False)
