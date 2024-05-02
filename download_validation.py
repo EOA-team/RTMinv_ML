@@ -216,7 +216,7 @@ def extract_s2_data(
     return mapper
 
 
-def find_nearest(point, tree):
+def find_nearest(point, tree, pixs):
     ''' 
     Find the nearest point in pixs for each point in gdf_date
     '''
@@ -338,7 +338,7 @@ if __name__ == '__main__':
                         pixs_tree = cKDTree(pixs['geometry'].apply(lambda geom: (geom.x, geom.y)).tolist())
 
                         # Apply the function to each point in gdf_date
-                        nearest_points = gdf_date['geometry'].apply(lambda point: find_nearest(point, pixs_tree))
+                        nearest_points = gdf_date['geometry'].apply(lambda point: find_nearest(point, pixs_tree, pixs))
                         nearest_points = nearest_points.rename(columns={'geometry': 'geometry_s2'})
                         gdf_date = pd.concat([gdf_date[['date', 'geometry'] +trait_cols +[loc_col]], nearest_points], axis=1)
 
@@ -381,7 +381,7 @@ if __name__ == '__main__':
                         """
 
   # Save in-situ val data
-  data_path = base_dir.joinpath(f'results/validation_data_extended_angles.pkl')
+  data_path = base_dir.joinpath(f'results/validation_data_extended_angles_debug.pkl')
   with open(data_path, 'wb+') as dst:
       pickle.dump(val_df, dst)
 
