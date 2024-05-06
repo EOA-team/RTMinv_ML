@@ -1,0 +1,35 @@
+Model: 
+    name : "NN2"
+    input_size: 10
+    hidden_size: 16
+    hidden_layer: 1
+    output_size: 1
+    epochs: 100
+    batch_size: 4
+    optim: 
+        name: Adam
+        lr: 0.01
+    save: True
+    save_path: 'trained_models/NN_soil22_inverse1_noisev2_earlystop.pkl'
+    gpu : False
+
+Seed: 10
+
+Data:
+    data_path : ['../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints_inverse1.pkl']
+    test_data_path : '../results/validation_data_extended_lai.pkl'
+    baresoil_samples : ['../results/GEE_baresoil_v2/sampled_pixels_31TGM.pkl', '../results/GEE_baresoil_v2/sampled_pixels_31TGN.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TLT.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TMT.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TNT.pkl']
+    train_cols : ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']
+    target_col : 'lai'   
+    test_size : 0.2 
+    normalize: True
+
+Grid:
+    lr: [0.01, 0.001, 0.0001]
+    hidden_size : [8, 16, 32]
+    hidden_layer: [1, 2, 3]
+    batch_size: [4, 8, 16]
+    optim: ['Adam', 'SGD']
+    criterion: ['MSE', 'L1']
+
+
