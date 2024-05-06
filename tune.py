@@ -82,7 +82,7 @@ def tune_model(config: dict) -> None:
   # Open a CSV file to store the results
   results_file = os.path.join(results_dir, config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_tuning.csv')
   with open(results_file, 'w', newline='') as csvfile:
-    fieldnames = list(hyperparam_grid.keys()) +['Test_RMSE', 'Test_MAE', 'Test_R2', 'slope', 'int', 'Test_rmselow']
+    fieldnames = list(hyperparam_grid.keys()) +['Test_RMSE', 'Test_MAE', 'Test_R2', 'slope', 'int', 'Test_rmselow', 'Test_fabio']
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -92,7 +92,7 @@ def tune_model(config: dict) -> None:
 
       # Update the hyperparameters in the config
       config = update_config(hyperparam_grid.keys(), hyperparam_values)
-    
+
       # Save the updated config to a temporary file
       temp_config_path = os.path.join(results_dir, 'temp_config.yaml')
       temp_config_path = save_updated_config(config, temp_config_path)
@@ -120,6 +120,8 @@ def tune_model(config: dict) -> None:
       test_int = float(test_int_line[0].split(': ')[1]) if test_int_line else None
       test_rmselow_line = [line for line in output_lines if 'Test rmselow' in line]
       test_rmselow = float(test_rmselow_line[0].split(': ')[1]) if test_rmselow_line else None
+      test_fabio_line = [line for line in output_lines if 'Test fabio' in line]
+      test_fabio = float(test_fabio_line[0].split(': ')[1]) if test_fabio_line else None
 
       # Write the results to the CSV file
       row_dict = {h: hyperparam_values[i] for i, h in enumerate(hyperparam_grid.keys())}
@@ -129,10 +131,10 @@ def tune_model(config: dict) -> None:
       row_dict['slope'] = test_slope
       row_dict['int'] = test_int
       row_dict['Test_rmselow'] = test_rmselow
+      row_dict['Test_fabio'] = test_rmselow
       writer.writerow(row_dict)
 
       # Delete the temporary saved model and scaler
-      print(config['Model']['save_path'])
       os.remove(config['Model']['save_path'])
       os.remove(config['Model']['save_path'].split('.')[0] + '_scaler.pkl')
 
