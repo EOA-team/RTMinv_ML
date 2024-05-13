@@ -6,7 +6,7 @@ Random Forest Regressor model to perform a RTM inversion
 
 from sklearn.model_selection import cross_val_score, KFold
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import pandas as pd
 from typing import Any, Dict, List, Optional
 import pickle
@@ -14,7 +14,7 @@ import numpy as np
 from tqdm import tqdm
 
 class RF(RandomForestRegressor):
-    def __init__(self, n_estimators=100, max_depth=None, min_samples_split=2, min_samples_leaf=1, random_state=None, k_folds: Optional[int] = 5):
+    def __init__(self, n_estimators=100, max_depth=None, min_samples_split=2, min_samples_leaf=1, max_features=2,random_state=None, k_folds: Optional[int] = 5):
         '''
         Random Forest regressor model
 
@@ -30,6 +30,7 @@ class RF(RandomForestRegressor):
             max_depth=max_depth,
             min_samples_split=min_samples_split,
             min_samples_leaf=min_samples_leaf,
+            max_features=max_features,
             random_state=random_state
         )
         self.k_folds = k_folds
@@ -82,17 +83,29 @@ class RF(RandomForestRegressor):
         # Make predictions on the testing set
         return super().predict(X_test)
         
-
-    def test_scores(self, y_test: pd.Series, y_pred: np.array) -> None:
+    
+    def test_scores(self, y_test: np.array, y_pred: np.array, dataset: str) -> None:
         '''
-        Compute scores on test set
+        Compute scores on the test set
 
-        :param y_test: test labels
-        :param y_pred: test predictions
+        :param y_test: Test labels
+        :param y_pred: Test predictions
         '''
-        # Compute RMSE on the test set
+        # Compute different scores on the test set
         test_rmse = mean_squared_error(y_test, y_pred, squared=False)
-        print(f'Test RMSE: {test_rmse}')
+        test_mae = mean_absolute_error(y_test, y_pred)
+        test_r2 = r2_score(y_test, y_pred)
+        slope, intercept = np.polyfit(y_test, y_pred, 1)
+        rmselow = mean_squared_error(y_test[y_test<3], y_pred[y_test<3], squared=False)
+        fabio = abs(np.mean(y_test-y_pred)) + np.std(y_test-y_pred) - np.sqrt(np.cov(y_test.flatten(), y_pred.flatten())[0,1])
+        print(f'{dataset} RMSE: {test_rmse}')
+        print(f'{dataset} MAE: {test_mae}')
+        print(f'{dataset} R2: {test_r2}')
+        print('Regression slope:', slope)
+        print('Regression intercept:', intercept)
+        print(f'{dataset} rmselow: {rmselow}')
+        print(f'{dataset} fabio: {fabio}')
+
 
     def save(self, model, model_filename: str) -> None:
         ''' 

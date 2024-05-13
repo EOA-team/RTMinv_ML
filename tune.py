@@ -135,6 +135,7 @@ def tune_model(config: dict) -> None:
       writer.writerow(row_dict)
 
       # Delete the temporary saved model and scaler
+      print(config['Model']['save_path'])
       os.remove(config['Model']['save_path'])
       os.remove(config['Model']['save_path'].split('.')[0] + '_scaler.pkl')
 
