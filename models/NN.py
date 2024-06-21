@@ -15,7 +15,6 @@ import numpy as np
 import pickle
 
 
-
 class SimpleNeuralNetwork(nn.Module):
   def __init__(self, input_size, hidden_size, hidden_layers, output_size):
     super(SimpleNeuralNetwork, self).__init__()
@@ -51,6 +50,8 @@ class SimpleNeuralNetwork(nn.Module):
     return x
 """
 
+
+
 class NeuralNetworkRegressor(nn.Module):
   def __init__(self, input_size, hidden_size, hidden_layer, output_size, epochs=100, batch_size=32, 
   optim={'name': 'Adam', 'learning_rate': 0.01}, criterion='MSE', random_state=42):
@@ -70,6 +71,7 @@ class NeuralNetworkRegressor(nn.Module):
       super(NeuralNetworkRegressor, self).__init__()
 
       self.model = SimpleNeuralNetwork(input_size, hidden_size, hidden_layer, output_size)
+      #self.model = SimpleNeuralNetwork(input_size, hidden_size, output_size)
       self.epochs = epochs
       self.batch_size = batch_size
       self.random_state = random_state
@@ -118,25 +120,34 @@ class NeuralNetworkRegressor(nn.Module):
         return self.model(x)
         
 
-  def fit(self, X: np.array, y: np.array):
+  def fit(self, X: np.array, y: np.array, X_test: np.array, y_test: np.array):
       '''
       Fit the model on the training set
       :param X: training features. Is tensor if GPU used
       :param y: training labels. Is tensor if GPU used
+      :param X_test: test data
+      :param y_test: test labels
       '''
       torch.manual_seed(self.random_state)
       # Convert NumPy arrays to PyTorch tensors
       if not isinstance(X, torch.Tensor) or not isinstance(y, torch.Tensor):
         X = torch.FloatTensor(X)
         y = torch.FloatTensor(y).view(-1, 1)
+        X_test = torch.FloatTensor(X_test)
+        y_test = torch.FloatTensor(y_test).view(-1, 1)
 
       # Create a DataLoader for batch training
       train_dataset = TensorDataset(X, y)
       train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+    
+      # Create a DataLoader for batch testing
+      test_dataset = TensorDataset(X_test, y_test)
+      test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)  
 
       # Training loop
       for epoch in range(self.epochs):
           self.model.train()
+          train_loss = 0
 
           for batch_X, batch_y in train_loader:
               # Forward pass
@@ -148,8 +159,24 @@ class NeuralNetworkRegressor(nn.Module):
               loss.backward()
               self.optimizer.step()
 
-          if (epoch + 1) % 10 == 0:
-              print(f'Epoch [{epoch+1}/{self.epochs}], Loss (MSE): {loss.item():.4f}')
+              train_loss += loss.item()* batch_X.size(0) 
+          
+          train_loss /= len(train_loader.dataset) # Average loss over all training batches
+
+          if (epoch + 1) % 10 == 0: # Report on train and test loss every 10 epochs
+              self.model.eval()  # Set model to evaluation mode
+              test_loss = 0.0
+
+              with torch.no_grad():  # No need to track gradients during validation
+                  for batch_X, batch_y in test_loader:
+                      outputs = self.model(batch_X)
+                      loss = self.criterion(outputs, batch_y)
+                      test_loss += loss.item() * batch_X.size(0)  # Accumulate batch loss
+
+              test_loss /= len(test_loader.dataset)  # Average loss over all validation batches
+              print(f'Epoch [{epoch+1}/{self.epochs}], Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}')
+
+
 
   def predict(self, X_test: np.array):
       '''
@@ -186,16 +213,16 @@ class NeuralNetworkRegressor(nn.Module):
       test_rmse = mean_squared_error(y_test, y_pred, squared=False)
       test_mae = mean_absolute_error(y_test, y_pred)
       test_r2 = r2_score(y_test, y_pred)
-      slope, intercept = np.polyfit(y_test.flatten(), y_pred.flatten(), 1)
+      slope, intercept = np.polyfit(y_test, y_pred.flatten(), 1)
       rmselow = mean_squared_error(y_test[y_test<3], y_pred[y_test<3], squared=False)
-      fabio = abs(np.mean(y_test-y_pred)) + np.std(y_test-y_pred) - np.sqrt(np.cov(y_test.flatten(), y_pred.flatten())[0,1])
+      #fabio = abs(np.mean(y_test-y_pred)) + np.std(y_test-y_pred) - np.sqrt(np.cov(y_test.flatten(), y_pred.flatten())[0,1])
       print(f'{dataset} RMSE: {test_rmse}')
       print(f'{dataset} MAE: {test_mae}')
       print(f'{dataset} R2: {test_r2}')
       print('Regression slope:', slope)
       print('Regression intercept:', intercept)
       print(f'{dataset} rmselow: {rmselow}')
-      print(f'{dataset} fabio: {fabio}')
+      #print(f'{dataset} fabio: {fabio}')
 
   def save(self, model, model_filename: str) -> None:
       ''' 
