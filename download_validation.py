@@ -282,6 +282,13 @@ def load_data(data_path: str):
     return gdf, loc, traits
 
 
+def transform_to_center(point):
+    pixel_size = 10
+    x_ul, y_ul = point.x, point.y
+    x_center = x_ul + pixel_size / 2
+    y_center = y_ul - pixel_size / 2
+    return Point(x_center, y_center) 
+
 if __name__ == '__main__':
 
   # Path to validation in situ measurements
@@ -329,6 +336,9 @@ if __name__ == '__main__':
                     for scene_id, scene in s2_data.data:
                         
                         pixs = scene.to_dataframe()
+                        # Shift pixels to center
+                        pixs = pixs.to_crs('EPSG:2056')
+                        pixs['geometry'] = pixs['geometry'].apply(transform_to_center)
                         pixs = pixs.to_crs('EPSG:4326')
                         
                         # Find S2-data closest (within 10m) to validation data for that date
@@ -381,7 +391,7 @@ if __name__ == '__main__':
                         """
 
   # Save in-situ val data
-  data_path = base_dir.joinpath(f'results/validation_data_extended_angles_debug.pkl')
+  data_path = base_dir.joinpath(f'results/validation_data_extended_angles_shift.pkl')
   with open(data_path, 'wb+') as dst:
       pickle.dump(val_df, dst)
 
