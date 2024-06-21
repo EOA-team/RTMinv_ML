@@ -136,10 +136,11 @@ def prepare_data_test(config: dict) -> Union[Tuple[np.array, np.array, np.array,
   :param config: dictionary of configuration parameters
   :returns: X pd.DataFrame and y pd.Series for training and test sets 
   '''
-  data_path = config['Data']['test_data_path']
+  data_path = config['Data']['val_data_path']
 
   if isinstance(data_path, str):
     df = pd.read_pickle(data_path)
+    df = df[~df[config['Data']['target_col']].isna()]
     X = df[config['Data']['train_cols']]
     y = df[config['Data']['target_col']]
 
@@ -170,6 +171,7 @@ def prepare_data_test(config: dict) -> Union[Tuple[np.array, np.array, np.array,
     # Assuming all files in the list are pickled DataFrames
     dfs = [pd.read_pickle(path) for path in data_path]
     concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
+    concatenated_df = concatenated_df[~concatenated_df[config['Data']['target_col']].isna()]
     X = concatenated_df[config['Data']['train_cols']] #  concatenated_df[config['Data']['train_cols']]
     y = concatenated_df[config['Data']['target_col']] #  concatenated_df[config['Data']['target_col']]
 
@@ -226,7 +228,7 @@ def test_model(config: dict) -> None:
   #############################################
   # DATA
   X_test, y_test = prepare_data_test(config=config) # unseen validation data (in situ)
-  _, X_train, _, y_train = prepare_data_train(config=config) # performance on training data
+  #_, X_train, _, y_train = prepare_data_train(config=config) # performance on training data
 
   # Move data to CUDA if GPUs requested and available
   device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
@@ -260,9 +262,9 @@ def test_model(config: dict) -> None:
     model.test_scores(y_test=y_test, y_pred=y_pred)
   else: 
     y_pred = model.predict(X_test=X_test)
-    model.test_scores(y_test=y_test, y_pred=y_pred, dataset='Test') 
-    y_pred = model.predict(X_test=X_train)
-    model.test_scores(y_test=y_train, y_pred=y_pred, dataset='Train') 
+    model.test_scores(y_test=y_test, y_pred=y_pred, dataset='Val') 
+    #y_pred = model.predict(X_test=X_train)
+    #model.test_scores(y_test=y_train, y_pred=y_pred, dataset='Train') 
 
   return
 

@@ -30,7 +30,7 @@ def load_config(config_path: str) -> Dict:
   return config
 
 
-def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.array], None]:
+def prepare_data_old(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.array], None]:
   ''' 
   Load data and prepare training and testing sets
 
@@ -138,6 +138,104 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
       return None
 
 
+def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.array], None]:
+  ''' 
+  Load data and prepare training and testing sets
+
+  :param config: dictionary of configuration parameters
+  :returns: X pd.DataFrame and y pd.Series for training and test sets 
+  '''
+  data_path = config['Data']['data_path']
+  test_data_path = config['Data']['test_data_path']
+
+  ##### Load test data
+
+  if isinstance(test_data_path, str):
+    df = pd.read_pickle(test_data_path)
+    X_test = df[config['Data']['train_cols']]
+    y_test = df[config['Data']['target_col']]
+
+  elif isinstance(test_data_path, list):
+    # Assuming all files in the list are pickled DataFrames
+    dfs = [pd.read_pickle(path) for path in test_data_path]
+    concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
+    X_test = concatenated_df[config['Data']['train_cols']]
+    y_test = concatenated_df[config['Data']['target_col']] 
+
+  ##### Load train data, normalize train and test
+
+  if isinstance(data_path, str):
+    df = pd.read_pickle(data_path)
+    X_train = df[config['Data']['train_cols']]
+    y_train = df[config['Data']['target_col']]
+    
+    X_soil = pd.DataFrame()
+    y_soil = pd.Series()
+    if 'baresoil_samples' in config['Data'].keys():
+      baresoil_dfs = [pd.read_pickle(path) for path in config['Data']['baresoil_samples']]
+      concatenated_df = pd.concat(baresoil_dfs, axis=0, ignore_index=True)
+      X_soil = concatenated_df[config['Data']['train_cols']]
+      y_soil = pd.Series([0]*len(X_soil))
+
+    X_train = pd.concat([X_train , X_soil], ignore_index=True)
+    y_train = pd.concat([y_train , y_soil], ignore_index=True)
+
+    if config['Data']['normalize']:
+      scaler = MinMaxScaler()
+      X_train = scaler.fit_transform(X_train) # becomes an array
+      X_test = scaler.transform(X_test)
+      # Save for model inference
+      scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl' \
+        if 'save_path' in config['Model'].keys() \
+        else config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_scaler.pkl' 
+      os.makedirs(os.path.dirname(scaler_path), exist_ok=True)
+      
+      with open(scaler_path, 'wb') as f:
+        pickle.dump(scaler, f)
+        return X_train, X_test, y_train.values, y_test.values
+    else:
+      return X_train.values, X_test.values, y_train, y_test
+
+  
+
+  elif isinstance(data_path, list):
+    # Assuming all files in the list are pickled DataFrames
+    dfs = [pd.read_pickle(path) for path in data_path]
+    concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
+    X_train = concatenated_df[config['Data']['train_cols']]
+    y_train = concatenated_df[config['Data']['target_col']] 
+    
+    X_soil = pd.DataFrame()
+    y_soil = pd.Series()
+    if 'baresoil_samples' in config['Data'].keys():
+      baresoil_dfs = [pd.read_pickle(path) for path in config['Data']['baresoil_samples']]
+      concatenated_df = pd.concat(baresoil_dfs, axis=0, ignore_index=True)
+      X_soil = concatenated_df[config['Data']['train_cols']]
+      y_soil = pd.Series([0]*len(X_soil))
+    
+    X_train = pd.concat([X_train , X_soil], ignore_index=True)
+    y_train = pd.concat([pd.Series(y_train), y_soil], ignore_index=True)
+
+    if config['Data']['normalize']:
+      scaler = MinMaxScaler()
+      X_train = scaler.fit_transform(X_train) # becomes an array
+      X_test = scaler.transform(X_test)
+      # Save for model inference
+      scaler_path = config['Model']['save_path'].split('.')[0] + '_scaler.pkl' \
+        if 'save_path' in config['Model'].keys() \
+        else config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_scaler.pkl' 
+      os.makedirs(os.path.dirname(scaler_path), exist_ok=True)
+
+      with open(scaler_path, 'wb') as f:
+        pickle.dump(scaler, f)
+        return X_train, X_test, y_train.values, y_test
+    else:
+      return X_train.values, X_test.values, y_train, y_test
+
+  else:
+      return None
+
+
 def build_model(config: dict) -> Any:
   ''' 
   Instantiated model
@@ -206,7 +304,7 @@ def train_model(config: dict) -> None:
   if model_name == 'GPR': # Active learning
     model.fit(X_train=X_train,y_train=y_train, X_test=X_test, y_test=y_test)
   else:
-    model.fit(X=X_train, y=y_train)
+    model.fit(X=X_train, y=y_train,  X_test=X_test, y_test=y_test)
     #############################################
     # TEST 
     y_pred = model.predict(X_test=X_test)
