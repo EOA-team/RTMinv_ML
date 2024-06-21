@@ -63,11 +63,7 @@ def test_model(config: dict) -> None:
       slope, intercept = np.polyfit(y_test, y_pred, 1)
       rmse_low = mean_squared_error(y_test[y_test<3], y_pred[y_test<3], squared=False)
 
-      # Fabio score
-      fabio = abs(np.mean(y_test-y_pred)) + np.std(y_test-y_pred) - np.sqrt(np.cov(y_test, y_pred.flatten())[0,1])
-      fabio2 = abs(np.mean(y_test-y_pred)) + np.std(y_test-y_pred)
-
-      return model_name, test_rmse, test_mae, r2_score(y_test, y_pred), slope[0], intercept[0], rmse_low, fabio, fabio2
+      return model_name, test_rmse, test_mae, r2_score(y_test, y_pred), slope[0], intercept[0], rmse_low
 
 
 def test_model_lowLAI(config: dict) -> None:
@@ -125,7 +121,7 @@ if __name__ == "__main__":
     noise_levels = [1, 3, 5, 10, 15, 20]
     noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
 
-    results = {noise_type: {'rmse': [], 'std': [], 'slope': [], 'intercept': [], 'rmselow': [], 'fabio': [], 'fabio2': []} for noise_type in noise_types}
+    results = {noise_type: {'rmse': [], 'mae': [], 'r2': [], 'slope': [], 'intercept': [], 'rmselow': []} for noise_type in noise_types}
 
     for noise_type in noise_types:
       for noise_level in noise_levels:
@@ -133,35 +129,32 @@ if __name__ == "__main__":
 
         # Modify config: pass data with noise, change model name
         config = load_config(config_path)
-        config['Model']['save_path'] = config['Model']['save_path'].split('.pkl')[0] + f'_{noise_type}{noise_level}_noisev2.pkl'
-        config['Data']['data_path'] = [f.split('.pkl')[0] + f'_{noise_type}{noise_level}_v2.pkl' for f in config['Data']['data_path']]
+        config['Model']['save_path'] = config['Model']['save_path'].split('.pkl')[0] + f'_{noise_type}{noise_level}.pkl'
+        config['Data']['data_path'] = [f.split('.pkl')[0] + f'_{noise_type}{noise_level}.pkl' for f in config['Data']['data_path']]
         config_test = copy.deepcopy(config)
 
-        #train_model(config)
-        model_name, test_rmse, test_mae, y_std, slope, intercept, rmse_low, fabio, fabio2 = test_model(config_test)
+        train_model(config)
+        model_name, test_rmse, test_mae, r2, slope, intercept, rmse_low = test_model(config_test)
         #model_name, test_rmse, y_std = test_model_lowLAI(config_test)
         results[noise_type]['rmse'].append(test_rmse)
-        results[noise_type]['std'].append(y_std)  
+        results[noise_type]['mae'].append(test_mae)
+        results[noise_type]['r2'].append(r2)  
         results[noise_type]['slope'].append(slope)  
         results[noise_type]['intercept'].append(intercept)  
-        results[noise_type]['rmselow'].append(rmse_low)
-        results[noise_type]['fabio'].append(fabio) 
-        results[noise_type]['fabio2'].append(fabio2)  
+        results[noise_type]['rmselow'].append(rmse_low) 
  
     # Save results to Excel
     data = {'Noise Level': noise_levels}
     for noise_type, values in results.items():
         data[f'{noise_type}_rmse'] = values['rmse']
-        data[f'{noise_type}_std/r2'] = values['std']
-        data[f'{noise_type}_std/r2'] = values['std']
+        data[f'{noise_type}_mae'] = values['mae']
+        data[f'{noise_type}_r2'] = values['r2']
         data[f'{noise_type}_slope'] = values['slope']
         data[f'{noise_type}_intercept'] = values['intercept']
         data[f'{noise_type}_rmselow'] = values['rmselow']
-        data[f'{noise_type}_fabio'] = values['fabio']
-        data[f'{noise_type}_fabio2'] = values['fabio2']
 
     df_results = pd.DataFrame(data)
-    df_results.to_excel('../results/noise_results_NN_noisev2.xlsx', index=False)
+    df_results.to_excel('../results/noise_results_NN_soilnoise.xlsx', index=False)
 
     # Plot
     plt.figure(figsize=(10, 6))
@@ -170,6 +163,6 @@ if __name__ == "__main__":
 
     plt.xlabel('Noise Level')
     plt.ylabel('Test RMSE')
-    plt.title('NN with noise RMSE')
+    plt.title('Val set RMSE of NN with soil and noise ')
     plt.legend()
-    plt.savefig('../results/noise_results_NN_noisev2.png')  # Save plot as image
+    plt.savefig('../results/noise_results_NN_soilnoise.png')  # Save plot as image
