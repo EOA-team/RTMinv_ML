@@ -11,15 +11,14 @@ Model:
         name: Adam
         lr: 0.001
     save: True
-    save_path: 'trained_models/NN_nosoil_seed.pkl'
-    score_path: 'trained_models/NN_nosoil_scores.xlsx'
+    save_path: 'trained_models/NN_noise_soil.pkl'
     gpu : True
 
 Seed: [0,1,2,3,4]
 
 Data:
-    data_path : ['../results/lut_based_inversion/prosail_danner-etal_switzerland_nosoil_S2A_lai-cab-ccc-car_lut_no-constraints.pkl', '../results/lut_based_inversion/prosail_danner-etal_switzerland_nosoil_S2B_lai-cab-ccc-car_lut_no-constraints.pkl']
-    test_data_path : ['../results/lut_based_inversion/test/prosail_danner-etal_switzerland_nosoil_S2A_lai-cab-ccc-car_lut_no-constraints.pkl', '../results/lut_based_inversion/test/prosail_danner-etal_switzerland_nosoil_S2B_lai-cab-ccc-car_lut_no-constraints.pkl']
+    data_path : ['../results/lut_based_inversion/soil/prosail_danner-etal_switzerland_soil_lai-cab-ccc-car_lut_no-constraints.pkl']
+    test_data_path : ['../results/lut_based_inversion/test/prosail_danner-etal_switzerland_soil_lai-cab-ccc-car_lut_no-constraints.pkl']
     val_data_path : '../results/validation_data_extended_angles_shift.pkl'
     train_cols : ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']
     target_col : 'lai'   
