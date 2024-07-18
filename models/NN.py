@@ -7,13 +7,16 @@ Neural Network model to perform a RTM inversion
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.init as init
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.model_selection import KFold
 import pandas as pd
 import numpy as np
 import pickle
-
+import matplotlib.pyplot as plt
+import time
+import os
 
 class SimpleNeuralNetwork(nn.Module):
   def __init__(self, input_size, hidden_size, hidden_layers, output_size):
@@ -22,6 +25,10 @@ class SimpleNeuralNetwork(nn.Module):
 
     # Add hidden layers
     for _ in range(hidden_layers):
+        layer = nn.Linear(input_size, hidden_size)
+        # Custom initialization
+        #init.xavier_uniform_(layer.weight, gain=nn.init.calculate_gain('relu'))
+        #self.hidden_layers.append(layer)
         self.hidden_layers.append(nn.Linear(input_size, hidden_size))
         self.hidden_layers.append(nn.ReLU())
         input_size = hidden_size  # Update input size for the next layer
@@ -80,6 +87,10 @@ class NeuralNetworkRegressor(nn.Module):
       self.optim_kwargs = optim
       self.optimizer = self.get_optim(self.optim_kwargs)
       self.criterion = self.get_criterion(criterion) # nn.L1Loss() , nn.MSELoss()  
+
+      self.best_loss = np.inf  # Initialize best loss to infinity
+      self.early_stop_count = 0  # Initialize early stopping counter
+      self.patience = 9
 
 
   def get_criterion(self, criterion: str) -> optim:
@@ -144,11 +155,15 @@ class NeuralNetworkRegressor(nn.Module):
       test_dataset = TensorDataset(X_test, y_test)
       test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False)  
 
+      train_losses = []
+      test_losses = []
+
       # Training loop
       for epoch in range(self.epochs):
           self.model.train()
           train_loss = 0
 
+          start = time.time()
           for batch_X, batch_y in train_loader:
               # Forward pass
               outputs = self.model(batch_X)
@@ -160,23 +175,53 @@ class NeuralNetworkRegressor(nn.Module):
               self.optimizer.step()
 
               train_loss += loss.item()* batch_X.size(0) 
+          end = time.time()
+          #print('Batch took', end-start)
           
           train_loss /= len(train_loader.dataset) # Average loss over all training batches
+          train_losses.append(train_loss)
+
+
+          # Check test set loss, and early stopping
+
+          self.model.eval()  # Set model to evaluation mode
+          test_loss = 0.0
+
+          with torch.no_grad():  # No need to track gradients during validation
+              for batch_X, batch_y in test_loader:
+                  outputs = self.model(batch_X)
+                  loss = self.criterion(outputs, batch_y)
+                  test_loss += loss.item() * batch_X.size(0)  # Accumulate batch loss
+          
+          test_loss /= len(test_loader.dataset)  # Average loss over all validation batches
+          test_losses.append(test_loss)
 
           if (epoch + 1) % 10 == 0: # Report on train and test loss every 10 epochs
-              self.model.eval()  # Set model to evaluation mode
-              test_loss = 0.0
-
-              with torch.no_grad():  # No need to track gradients during validation
-                  for batch_X, batch_y in test_loader:
-                      outputs = self.model(batch_X)
-                      loss = self.criterion(outputs, batch_y)
-                      test_loss += loss.item() * batch_X.size(0)  # Accumulate batch loss
-
-              test_loss /= len(test_loader.dataset)  # Average loss over all validation batches
               print(f'Epoch [{epoch+1}/{self.epochs}], Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}')
+          
+          # Plot train and test loss
+          plt.figure(figsize=(10, 6))
+          plt.plot(range(1, len(train_losses) + 1), train_losses, label='Train Loss')
+          plt.plot(range(1, len(test_losses) + 1), test_losses, label='Test Loss')
+          plt.xlabel('Epoch')
+          plt.ylabel('Loss')
+          plt.title('Train and Test Loss')
+          plt.legend()
+          plt.grid(True)
+          plt.savefig('train_test_loss.png')
+          
+          """ 
+          # Early stopping logic
+          if test_loss < self.best_loss:
+              self.best_loss = test_loss
+              self.early_stop_count = 0  # Reset early stopping counter
+          else:
+              self.early_stop_count += 1
 
-
+          if self.early_stop_count >= self.patience:
+                print(f'Early stopping at epoch {epoch + 1} with validation loss: {test_loss:.4f}')
+                break  # Stop training
+          """
 
   def predict(self, X_test: np.array):
       '''
@@ -195,7 +240,7 @@ class NeuralNetworkRegressor(nn.Module):
 
       return predictions
 
-  def test_scores(self, y_test: pd.Series, y_pred: np.array, dataset: str):
+  def test_scores(self, y_test: pd.Series, y_pred: np.array, dataset: str, score_path: str = None):
       '''
       Compute scores on the test set
 
@@ -223,6 +268,28 @@ class NeuralNetworkRegressor(nn.Module):
       print('Regression intercept:', intercept)
       print(f'{dataset} rmselow: {rmselow}')
       #print(f'{dataset} fabio: {fabio}')
+
+      # Open excel file at score_path and append results
+      score_data = {
+          'Dataset': [dataset],
+          'RMSE': [test_rmse],
+          'MAE': [test_mae],
+          'R2': [test_r2],
+          'Slope': [slope],
+          'Intercept': [intercept],
+          'RMSelow': [rmselow]
+      }
+      score_df = pd.DataFrame(score_data)
+
+      if score_path is not None:
+        if os.path.exists(score_path):
+            existing_df = pd.read_excel(score_path)
+            updated_df = pd.concat([existing_df, score_df], ignore_index=True)
+        else:
+            updated_df = score_df
+
+        updated_df.to_excel(score_path, index=False)
+
 
   def save(self, model, model_filename: str) -> None:
       ''' 

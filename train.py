@@ -88,8 +88,8 @@ def prepare_data_old(config: dict) -> Union[Tuple[np.array, np.array, np.array, 
     # Assuming all files in the list are pickled DataFrames
     dfs = [pd.read_pickle(path) for path in data_path]
     concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
-    # Sample 50000 data pairs
-    #sampled_df = concatenated_df.sample(50000, random_state=config['Seed']) if len(concatenated_df) > 50000 else concatenated_df
+    # Sample data
+    #concatenated_df = concatenated_df.sample(100, random_state=config['Seed'])
     X = concatenated_df[config['Data']['train_cols']] #sampled_df[config['Data']['train_cols']] #
     y = concatenated_df[config['Data']['target_col']] #sampled_df[config['Data']['target_col']] #  
     X_train, X_test, y_train, y_test = train_test_split(X, y.values, test_size=config['Data']['test_size'], random_state=config['Seed'])
@@ -202,6 +202,7 @@ def prepare_data(config: dict) -> Union[Tuple[np.array, np.array, np.array, np.a
     # Assuming all files in the list are pickled DataFrames
     dfs = [pd.read_pickle(path) for path in data_path]
     concatenated_df = pd.concat(dfs, axis=0, ignore_index=True)
+    #concatenated_df = concatenated_df.sample(10, random_state=config['Seed'])
     X_train = concatenated_df[config['Data']['train_cols']]
     y_train = concatenated_df[config['Data']['target_col']] 
     
@@ -251,6 +252,7 @@ def build_model(config: dict) -> Any:
       #torch.manual_seed(config['Seed'])
     # Model hypereparameters can be set in the config, else default values used
     model_params = {key: value for key, value in config['Model'].items() if key != 'name'}  # Pass only hyperparams
+    model_params['random_state'] = config['Seed']
     model = MODELS[model_name](**model_params)
   
   return model
@@ -263,57 +265,74 @@ def train_model(config: dict) -> None:
 
   :param config: dictionary of configuration parameters
   '''
-
-  torch.manual_seed(config['Seed'])
-  np.random.seed(config['Seed'])
-
-  #############################################
-  # DATA
-  X_train, X_test, y_train, y_test = prepare_data(config=config)
-
-  # Move data to CUDA if GPUs requested and available
-  device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
-  #print(torch.cuda.is_available())
-  if device == torch.device('cuda'):
-    X_train, X_test, y_train, y_test = (
-      torch.FloatTensor(X_train).to(device),
-      torch.FloatTensor(X_test).to(device),
-      torch.FloatTensor(y_train).view(-1, 1).to(device),
-      torch.FloatTensor(y_test).view(-1, 1).to(device),
-    ) 
-
-  #############################################
-  # MODEL
-  if config['Model'].get('gpu') and torch.cuda.is_available():
-    print('Using GPUs')
-  if 'gpu' in config['Model'].keys():
-    config['Model'].pop('gpu')
-
+  model_basename = config['Model'].pop('save_path') if 'save_path' in config['Model'].keys() else model_name + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.pkl'
   save_model = config['Model'].pop('save')
-  model_name = config['Model']['name']
-  model_filename = config['Model'].pop('save_path') if 'save_path' in config['Model'].keys() else model_name + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.pkl' # path to save trained model 
-  model = build_model(config=config)
-  if device == torch.device('cuda'):
-    model.to(device)
-  #print(f"Model on: {next(model.parameters()).device}")
-  #print(f"Data on: {X_test.device}")
+  score_path = config['Model'].pop('score_path') if 'score_path' in config['Model'].keys() else None
+  gpu = config['Model'].pop('gpu')
+  
+  if not isinstance(config['Seed'], list):
+    config['Seed'] = [config['Seed']]
+
+  for seed in config['Seed']:
+    print('Running with seed', seed)
+
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    config['Seed'] = seed
+
+    #############################################
+    # DATA
+    config['Model']['save_path'] = model_basename.split('.')[0] + f'{seed}.pkl'
+    X_train, X_test, y_train, y_test = prepare_data(config=config)
+    """
+    X_train = X_train[y_train<7]
+    y_train = y_train[y_train<7]
+    X_test = X_test[y_test<7]
+    y_test = y_test[y_test<7]
+    """
+
+    # Move data to CUDA if GPUs requested and available
+    device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
+    if device == torch.device('cuda'):
+      X_train, X_test, y_train, y_test = (
+        torch.FloatTensor(X_train).to(device),
+        torch.FloatTensor(X_test).to(device),
+        torch.FloatTensor(y_train).view(-1, 1).to(device),
+        torch.FloatTensor(y_test).view(-1, 1).to(device),
+      ) 
+  
+    #############################################
+    # MODEL
+    if gpu and torch.cuda.is_available():
+      print('Using GPUs')
+    
+    model_name = config['Model']['name']
+    model_filename = config['Model'].pop('save_path') # path to save trained model 
+    model = build_model(config=config)
+    if device == torch.device('cuda'):
+      model.to(device)
+    #print(f"Model on: {next(model.parameters()).device}")
+    #print(f"Data on: {X_test.device}")
 
    
-  #############################################
-  # TRAIN
-  if model_name == 'GPR': # Active learning
-    model.fit(X_train=X_train,y_train=y_train, X_test=X_test, y_test=y_test)
-  else:
-    model.fit(X=X_train, y=y_train,  X_test=X_test, y_test=y_test)
     #############################################
-    # TEST 
-    y_pred = model.predict(X_test=X_test)
-    model.test_scores(y_test=y_test, y_pred=y_pred, dataset='Test')
-
-  #############################################
-  # SAVE 
-  if save_model:
-    model.save(model=model, model_filename=model_filename)
+    # TRAIN
+    if model_name == 'GPR': # Active learning
+      model.fit(X_train=X_train,y_train=y_train, X_test=X_test, y_test=y_test)
+    else:
+      model.fit(X=X_train, y=y_train,  X_test=X_test, y_test=y_test)
+      #############################################
+      # TEST 
+      y_pred = model.predict(X_test=X_test)
+      print('Final test', y_pred.min())
+      if not isinstance(y_test, pd.Series):
+          y_test = y_test.flatten()
+      model.test_scores(y_test=y_test, y_pred=y_pred.flatten(), dataset=f'Test {seed}', score_path=score_path)
+      
+    #############################################
+    # SAVE 
+    if save_model:
+      model.save(model=model, model_filename=model_filename)
 
   return
 

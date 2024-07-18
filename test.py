@@ -225,46 +225,60 @@ def test_model(config: dict) -> None:
   :param config: dictionary of configuration parameters
   '''
 
-  #############################################
-  # DATA
-  X_test, y_test = prepare_data_test(config=config) # unseen validation data (in situ)
-  #_, X_train, _, y_train = prepare_data_train(config=config) # performance on training data
+  if not isinstance(config['Seed'], list):
+    config['Seed'] = [config['Seed']]
 
-  # Move data to CUDA if GPUs requested and available
-  device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
-  if device == torch.device('cuda'):
-      X_test, y_test = (
-          torch.FloatTensor(X_test).to(device),
-          torch.FloatTensor(y_test).view(-1, 1).to(device)
-      )
-      X_train, y_train = (
-          torch.FloatTensor(X_train).to(device),
-          torch.FloatTensor(y_train).view(-1, 1).to(device)
-      )
-
-  #############################################
-  # MODEL
+  model_basename = config['Model']['save_path']  
   save_model = config['Model'].pop('save')
-  model_name = config['Model']['name']
-  model_filename = config['Model'].pop('save_path') 
-  with open(model_filename, 'rb') as f:
-    model = pickle.load(f)
+  score_path = config['Model'].pop('score_path') if 'score_path' in config['Model'].keys() else None
+    
 
-  # Move model to CUDA if GPUs are available
-  if device == torch.device('cuda'):
-      model.to(device)
+  for seed in config['Seed']:
+    print('Running with seed', seed)
 
-  #############################################
-  # TEST
-  if model_name == 'GPR': # Active learning
-    y_pred, y_std = model.predict(X_test, return_std=True)
-    print('Mean test std', y_std.mean()) 
-    model.test_scores(y_test=y_test, y_pred=y_pred)
-  else: 
-    y_pred = model.predict(X_test=X_test)
-    model.test_scores(y_test=y_test, y_pred=y_pred, dataset='Val') 
-    #y_pred = model.predict(X_test=X_train)
-    #model.test_scores(y_test=y_train, y_pred=y_pred, dataset='Train') 
+    config['Model']['save_path'] = model_basename.split('.')[0] + f'{seed}.pkl'
+
+    #############################################
+    # DATA
+    X_test, y_test = prepare_data_test(config=config) # unseen validation data (in situ)
+    #_, X_train, _, y_train = prepare_data_train(config=config) # performance on training data
+
+    # Move data to CUDA if GPUs requested and available
+    device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
+    if device == torch.device('cuda'):
+        X_test, y_test = (
+            torch.FloatTensor(X_test).to(device),
+            torch.FloatTensor(y_test).view(-1, 1).to(device)
+        )
+        """ 
+        X_train, y_train = (
+            torch.FloatTensor(X_train).to(device),
+            torch.FloatTensor(y_train).view(-1, 1).to(device)
+        )
+        """
+
+    #############################################
+    # MODEL
+    model_name = config['Model']['name']
+    model_filename = config['Model'].pop('save_path') 
+    with open(model_filename, 'rb') as f:
+      model = pickle.load(f)
+
+    # Move model to CUDA if GPUs are available
+    if device == torch.device('cuda'):
+        model.to(device)
+
+    #############################################
+    # TEST
+    if model_name == 'GPR': # Active learning
+      y_pred, y_std = model.predict(X_test, return_std=True)
+      print('Mean test std', y_std.mean()) 
+      model.test_scores(y_test=y_test, y_pred=y_pred)
+    else: 
+      y_pred = model.predict(X_test=X_test)
+      model.test_scores(y_test=y_test.flatten(), y_pred=y_pred.flatten(), dataset=f'Val {seed}', score_path=score_path)
+      #y_pred = model.predict(X_test=X_train)
+      #model.test_scores(y_test=y_train, y_pred=y_pred, dataset='Train') 
 
   return
 
