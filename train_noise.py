@@ -114,7 +114,7 @@ def test_model_lowLAI(config: dict) -> None:
 if __name__ == "__main__":
 
     config_path = 'configs/config_NN.yaml'
-    results_path = '../results/noise_results_NN_soil.xlsx'
+    results_path = '../results/noise_results_NN_nosoil.xlsx'
 
     noise_levels = [1, 3, 5, 10, 15, 20]
     noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
@@ -190,7 +190,7 @@ if __name__ == "__main__":
     plt.ylim(0,2)
     plt.title('Val set RMSE of NN with soil and noise ')
     plt.legend()
-    plt.savefig('../results/NN_noise_soil_RMSE.png')  # Save plot as image
+    plt.savefig('../results/NN_noise_nosoil_RMSE.png')  # Save plot as image
 
     # R2
     plt.figure(figsize=(10, 6))
@@ -204,4 +204,4 @@ if __name__ == "__main__":
     plt.ylim(-1,1)
     plt.title('Val set RMSE of NN with soil and noise ')
     plt.legend()
-    plt.savefig('../results/NN_noise_soil_R2.png') 
+    plt.savefig('../results/NN_noise_nosoil_R2.png') 
