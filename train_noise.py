@@ -113,16 +113,17 @@ def test_model_lowLAI(config: dict) -> None:
 
 if __name__ == "__main__":
 
-    config_path = 'configs/config_NN.yaml'
-    results_path = '../results/noise_results_NN_nosoil.xlsx'
+    config_path = 'configs/config_NN copy.yaml'
+    results_path = '../results/noise_results_NNsmall_nosoil.xlsx'
 
     noise_levels = [1, 3, 5, 10, 15, 20]
     noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
 
-    
+  
     for noise_type in noise_types:
       for noise_level in noise_levels:
 
+         
         ########### 
         # TRAIN
 
@@ -132,19 +133,54 @@ if __name__ == "__main__":
         config = load_config(config_path)
         config['Model']['save_path'] = config['Model']['save_path'].split('.pkl')[0] + f'_{noise_type}{noise_level}_seed.pkl'
         config['Data']['data_path'] = [f.split('.pkl')[0] + f'_{noise_type}{noise_level}.pkl' for f in config['Data']['data_path']]
-        config['Data']['test_data_path'] = [f.split('.pkl')[0] + f'_{noise_type}{noise_level}.pkl' for f in config['Data']['test_data_path']]
+        #config['Data']['test_data_path'] = [f.split('.pkl')[0] + f'_{noise_type}{noise_level}.pkl' for f in config['Data']['test_data_path']]
         config_test = copy.deepcopy(config)
 
-        train_model(config)
-
+        #train_model(config)
+         
         ########### 
-        # TEST
+        # TEST (synthetic data with no noise)
 
         if not isinstance(config_test['Seed'], list):
-          config['Seed'] = [config_test['Seed']]
-        
+          config['Seed'] = [config_test['Seed']]  
+
         model_basename = config_test['Model']['save_path']
         print(model_basename)
+        # Modfy path of data so that tets_model will work
+        val_data_path = config_test['Data']['val_data_path']
+        config_test['Data']['val_data_path'] = config['Data']['test_data_path']
+
+        for seed in config_test['Seed']:
+          print('Testing with seed', seed)
+          config_test['Model']['save_path'] = model_basename.split('.pkl')[0] + f'{seed}.pkl'
+          model_name, test_rmse, test_mae, r2, slope, intercept, rmse_low = test_model(config_test)
+
+          score_data = {
+              'Dataset': ['Test'],
+              'Type': [noise_type],
+              'Level': [noise_level],
+              'Seed': [seed],
+              'RMSE': [test_rmse],
+              'MAE': [test_mae],
+              'R2': [r2],
+              'Slope': [slope],
+              'Intercept': [intercept],
+              'RMSelow': [rmse_low]
+          }
+          score_df = pd.DataFrame(score_data)
+
+          if results_path is not None:
+            if os.path.exists(results_path):
+                existing_df = pd.read_excel(results_path)
+                updated_df = pd.concat([existing_df, score_df], ignore_index=True)
+            else:
+                updated_df = score_df
+            updated_df.to_excel(results_path, index=False)
+
+        ########### 
+        # VAL (in situ data)
+
+        config_test['Data']['val_data_path'] = val_data_path        
 
         for seed in config_test['Seed']:
           print('Validating with seed', seed)
@@ -173,35 +209,60 @@ if __name__ == "__main__":
                 updated_df = score_df
             updated_df.to_excel(results_path, index=False)
  
-    
+
+
     # Plot
-    mean_scores = updated_df.drop(['Dataset', 'Seed'], axis=1).groupby(['Type', 'Level']).mean().reset_index()
-    std_scores = updated_df.drop(['Dataset', 'Seed'], axis=1).groupby(['Type', 'Level']).std().reset_index()
+    mean_scores = updated_df.drop(['Seed'], axis=1).groupby(['Dataset', 'Type', 'Level']).mean().reset_index()
+    std_scores = updated_df.drop(['Seed'], axis=1).groupby(['Dataset', 'Type', 'Level']).std().reset_index()
 
-    # RMSE
-    plt.figure(figsize=(10, 6))
-    for noise_type in noise_types:
-        mean_rmse = mean_scores[mean_scores.Type == noise_type]['RMSE']
-        std_rmse = std_scores[std_scores.Type == noise_type]['RMSE']
-        plt.errorbar(noise_levels, mean_rmse, yerr=std_rmse, label=noise_type, capsize=5)
-    plt.xticks(noise_levels)
-    plt.xlabel('Noise Level [%]')
-    plt.ylabel('RMSE')
-    plt.ylim(0,2)
-    plt.title('Val set RMSE of NN with soil and noise ')
-    plt.legend()
-    plt.savefig('../results/NN_noise_nosoil_RMSE.png')  # Save plot as image
+    datasets = updated_df['Dataset'].unique()
 
-    # R2
-    plt.figure(figsize=(10, 6))
-    for noise_type in noise_types:
-        mean_r2 = mean_scores[mean_scores.Type == noise_type]['R2']
-        std_r2 = std_scores[std_scores.Type == noise_type]['R2']
-        plt.errorbar(noise_levels, mean_r2, yerr=std_r2, label=noise_type, capsize=5)
-    plt.xticks(noise_levels)
-    plt.xlabel('Noise Level [%]')
-    plt.ylabel('R2')
-    plt.ylim(-1,1)
-    plt.title('Val set RMSE of NN with soil and noise ')
-    plt.legend()
-    plt.savefig('../results/NN_noise_nosoil_R2.png') 
+    # Plot RMSE for val and test set
+    fig, axes = plt.subplots(1, 2, figsize=(20, 6))
+    for i, dataset in enumerate(datasets):
+
+        ax = axes[i]
+        # Filter data for the current dataset
+        mean_scores_dataset = mean_scores[mean_scores['Dataset'] == dataset]
+        std_scores_dataset = std_scores[std_scores['Dataset'] == dataset]
+        # Plot RMSE for each noise type
+        for noise_type in noise_types:
+            mean_rmse = mean_scores_dataset[mean_scores_dataset['Type'] == noise_type]['RMSE']
+            std_rmse = std_scores_dataset[std_scores_dataset['Type'] == noise_type]['RMSE']
+            ax.errorbar(noise_levels, mean_rmse, yerr=std_rmse, label=noise_type, capsize=5)
+        ax.set_xticks(noise_levels)
+        ax.set_xlabel('Noise Level [%]')
+        ax.set_ylabel('RMSE')
+        ax.set_ylim(0.5 if i==0 else 0, 1.6 if i==0 else 2)
+        ax.set_title(f'{dataset}')
+        ax.legend()
+
+    plt.suptitle('RMSE of NN with nosoil and noise for different datasets')
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to make space for the main title
+    plt.savefig('../results/NNsmall_noise_nosoil_RMSE_datasets.png')  # Save plot as image
+
+
+    # Plot R2 for val and test set
+    fig, axes = plt.subplots(1, 2, figsize=(20, 6))
+    for i, dataset in enumerate(datasets):
+
+        ax = axes[i]
+        # Filter data for the current dataset
+        mean_scores_dataset = mean_scores[mean_scores['Dataset'] == dataset]
+        std_scores_dataset = std_scores[std_scores['Dataset'] == dataset]
+        # Plot RMSE for each noise type
+        for noise_type in noise_types:
+            mean_rmse = mean_scores_dataset[mean_scores_dataset['Type'] == noise_type]['R2']
+            std_rmse = std_scores_dataset[std_scores_dataset['Type'] == noise_type]['R2']
+            ax.errorbar(noise_levels, mean_rmse, yerr=std_rmse, label=noise_type, capsize=5)
+        ax.set_xticks(noise_levels)
+        ax.set_xlabel('Noise Level [%]')
+        ax.set_ylabel('R2')
+        ax.set_ylim(0.5 if i==0 else -2, 1 if i==0 else 0.5)
+        ax.set_title(f'{dataset}')
+        ax.legend()
+
+    plt.suptitle('R2 of NN with nosoil and noise for different datasets')
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to make space for the main title
+    plt.savefig('../results/NNsmall_noise_nosoil_R2_datasets.png')  # Save plot as image
+    plt.show()  # Display the plot
