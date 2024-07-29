@@ -17,7 +17,7 @@ import os
 import csv
 from subprocess import run, PIPE
 import itertools
-
+import pandas as pd
 
 
 def load_config(config_path: str) -> Dict:
@@ -62,6 +62,62 @@ def save_updated_config(updated_config, temp_config_path):
   return temp_config_path
 
 
+
+def extract_scores_from_output(output_lines, hyperparam_grid, hyperparam_values, dataset):
+  """
+  Extract scores printed from running test.py
+
+  :param output_lines: list of strings (printed lines)
+  :param hyperparam_grid: dict with hyperparameter names as keys and lists of values as values
+  :param hyperparam_values: list of hyperparameter values
+  :param dataset: str. Test or Val set
+  :returns: pd.DataFrame with 1 row and columns are hyperparams and scores
+  """
+  
+  # Extract the test score from the output
+  seed_lines = [line for line in output_lines if 'seed' in line]
+
+  seeds = []
+  rmses = []
+  maes = []
+  r2s = []
+  slopes = []
+  ints = []
+  rmselows = []
+
+  for i, seed_line in enumerate(seed_lines):
+    seed = int(seed_line.split('seed')[-1])
+    rmse = float([line for line in output_lines if 'RMSE' in line][i].split(': ')[1])
+    mae = float([line for line in output_lines if 'MAE' in line][i].split(': ')[1])
+    r2 = float([line for line in output_lines if 'R2' in line][i].split(': ')[1])
+    slope = float([line for line in output_lines if 'Regression slope' in line][i].split(': ')[1])
+    inter = float([line for line in output_lines if 'Regression intercept' in line][i].split(': ')[1])
+    rmselow = float([line for line in output_lines if 'rmselow' in line][i].split(': ')[1])
+    
+    seeds.append(seed)
+    rmses.append(rmse)
+    maes.append(mae)
+    r2s.append(r2)
+    slopes.append(slope)
+    ints.append(inter)
+    rmselows.append(rmselow)
+
+  score_data = {
+      **{h: hyperparam_values[i] for i, h in enumerate(hyperparam_grid.keys())},
+      'Dataset': [dataset]*len(seeds),
+      'Seed': seeds,
+      'RMSE': rmses,
+      'MAE': maes,
+      'R2': r2s,
+      'Slope': slopes,
+      'Intercept': ints,
+      'RMSElow': rmselows
+  }
+  score_df = pd.DataFrame(score_data)
+
+  return score_df
+
+
 def tune_model(config: dict) -> None:
   ''' 
   Tune model based on grid of hyperparameter values
@@ -80,66 +136,76 @@ def tune_model(config: dict) -> None:
   os.makedirs(results_dir, exist_ok=True)
 
   # Open a CSV file to store the results
-  results_file = os.path.join(results_dir, config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_tuning.csv')
-  with open(results_file, 'w', newline='') as csvfile:
-    fieldnames = list(hyperparam_grid.keys()) +['Test_RMSE', 'Test_MAE', 'Test_R2', 'slope', 'int', 'Test_rmselow', 'Test_fabio']
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    writer.writeheader()
-
-    # Iterate over hyperparameter combinations
-    for hyperparam_values in hyperparam_combinations:
-      print('\n'.join([f'Training with hyperparameters ' + ', '.join([f'{key}: {value}' for key, value in zip(hyperparam_grid.keys(), hyperparam_values)])]))
-
-      # Update the hyperparameters in the config
-      config = update_config(hyperparam_grid.keys(), hyperparam_values)
-
-      # Save the updated config to a temporary file
-      temp_config_path = os.path.join(results_dir, 'temp_config.yaml')
-      temp_config_path = save_updated_config(config, temp_config_path)
-
-      # Call train.py with the updated config
-      train_cmd = ['python', 'train.py', temp_config_path]
-      process = run(train_cmd, stdout=PIPE, stderr=PIPE, universal_newlines=True)
-
-      # Call test.py (to test on validation set) with the updated config
-      test_cmd = ['python', 'test.py', temp_config_path]
-      process = run(test_cmd, stdout=PIPE, stderr=PIPE, universal_newlines=True)
-
-      # Extract the test score from the output
-      error_lines = process.stderr.split('\n')
-      output_lines = process.stdout.split('\n')
-      test_rmse_line = [line for line in output_lines if 'Test RMSE' in line]
-      test_rmse = float(test_rmse_line[0].split(': ')[1]) if test_rmse_line else None
-      test_mae_line = [line for line in output_lines if 'Test MAE' in line]
-      test_mae = float(test_mae_line[0].split(': ')[1]) if test_mae_line else None
-      test_r2_line = [line for line in output_lines if 'Test R2' in line]
-      test_r2 = float(test_r2_line[0].split(': ')[1]) if test_r2_line else None
-      test_slope_line = [line for line in output_lines if 'Regression slope' in line]
-      test_slope = float(test_slope_line[0].split(': ')[1]) if test_slope_line else None
-      test_int_line = [line for line in output_lines if 'Regression intercept' in line]
-      test_int = float(test_int_line[0].split(': ')[1]) if test_int_line else None
-      test_rmselow_line = [line for line in output_lines if 'Test rmselow' in line]
-      test_rmselow = float(test_rmselow_line[0].split(': ')[1]) if test_rmselow_line else None
-      test_fabio_line = [line for line in output_lines if 'Test fabio' in line]
-      test_fabio = float(test_fabio_line[0].split(': ')[1]) if test_fabio_line else None
-
-      # Write the results to the CSV file
-      row_dict = {h: hyperparam_values[i] for i, h in enumerate(hyperparam_grid.keys())}
-      row_dict['Test_RMSE'] = test_rmse
-      row_dict['Test_MAE'] = test_mae
-      row_dict['Test_R2'] = test_r2
-      row_dict['slope'] = test_slope
-      row_dict['int'] = test_int
-      row_dict['Test_rmselow'] = test_rmselow
-      row_dict['Test_fabio'] = test_rmselow
-      writer.writerow(row_dict)
-
-      # Delete the temporary saved model and scaler
-      print(config['Model']['save_path'])
-      os.remove(config['Model']['save_path'])
-      os.remove(config['Model']['save_path'].split('.')[0] + '_scaler.pkl')
-
+  results_file = os.path.join(results_dir, config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_tuning.xlsx')
   
+  # Iterate over hyperparameter combinations
+  for hyperparam_values in hyperparam_combinations:
+    print('\n'.join([f'Training with hyperparameters ' + ', '.join([f'{key}: {value}' for key, value in zip(hyperparam_grid.keys(), hyperparam_values)])]))
+
+    # Update the hyperparameters in the config
+    config = update_config(hyperparam_grid.keys(), hyperparam_values)
+    # Prepare for test
+    val_data_path = config['Data']['val_data_path']
+    config['Data']['val_data_path'] = config['Data']['test_data_path']
+    config['Model']['score_path'] = None
+
+    # Save the updated config to a temporary file
+    temp_config_path = os.path.join(results_dir, 'temp_config_nosoil.yaml')
+    temp_config_path = save_updated_config(config, temp_config_path)
+
+    ###########
+    # TRAIN
+
+    # Call train.py with the updated config
+    train_cmd = ['python', 'train.py', temp_config_path]
+    process = run(train_cmd, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+
+    ###########
+    # TEST
+
+    # Call test.py (to test on TEST set) with the updated config
+    test_cmd = ['python', 'test.py', temp_config_path]
+    process = run(test_cmd, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+
+
+    score_df = extract_scores_from_output(process.stdout.split('\n'), hyperparam_grid, hyperparam_values, 'Test')
+
+    if results_file is not None:
+      if os.path.exists(results_file):
+          existing_df = pd.read_excel(results_file)
+          updated_df = pd.concat([existing_df, score_df], ignore_index=True)
+      else:
+          updated_df = score_df
+      updated_df.to_excel(results_file, index=False)
+  
+  
+    ###########
+    # VALIDATION
+
+    # Prepare for validation
+    config['Data']['val_data_path'] = val_data_path
+    temp_config_path = save_updated_config(config, temp_config_path)
+
+    # Call test.py (to test on VALIDATION set) with the updated config
+    test_cmd = ['python', 'test.py', temp_config_path]
+    process = run(test_cmd, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+
+    score_df = extract_scores_from_output(process.stdoudt.split('\n'), hyperparam_grid, hyperparam_values, 'Val')
+
+    if results_file is not None:
+      if os.path.exists(results_file):
+          existing_df = pd.read_excel(results_file)
+          updated_df = pd.concat([existing_df, score_df], ignore_index=True)
+      else:
+          updated_df = score_df
+      updated_df.to_excel(results_file, index=False)
+
+    # Delete the temporary saved model and scaler
+    for seed in config['Seed']:
+      os.remove(config['Model']['save_path'].split('.')[0] + f'{seed}.pkl')
+      os.remove(config['Model']['save_path'].split('.')[0] + f'{seed}_scaler.pkl')
+
+
   # Delete the temporary config file
   os.remove(temp_config_path)
 
