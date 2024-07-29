@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime
-from rtm_inv2.core.lookup_table import LookupTable, generate_lut, simulate_from_lut
+from rtm_inv.core.lookup_table import LookupTable, generate_lut, simulate_from_lut
 import pickle
 import numpy as np
 import pandas as pd
