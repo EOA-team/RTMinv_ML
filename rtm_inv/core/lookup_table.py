@@ -263,25 +263,17 @@ def _setup(
     return lut_params
 
 def generate_lut(
-        sensor: str,
         lut_params: Path | pd.DataFrame,
         lut_size: Optional[int] = 50000,
-        rtm_name: Optional[str] = 'prosail',
         sampling_method: Optional[str] = 'LHS',
         solar_zenith_angle: Optional[float] = None,
         viewing_zenith_angle: Optional[float] = None,
         solar_azimuth_angle: Optional[float] = None,
         viewing_azimuth_angle: Optional[float] = None,
         relative_azimuth_angle: Optional[float] = None,
-        fpath_srf: Optional[Path] = None,
-        remove_invalid_green_peaks: Optional[bool] = False,
-        linearize_lai: Optional[bool] = False,
         fixed_angles: Optional[bool] = False,
-        rsoil0: Optional[np.array] = None,
-        soil_spectrum1: Optional[np.array] = None,
-        soil_spectrum2: Optional[np.array] = None,
         **kwargs
-) -> pd.DataFrame:
+    ) -> pd.DataFrame:
     """
     Generates a Lookup-Table (LUT) based on radiative transfer model input
     parameters.
@@ -290,18 +282,12 @@ def generate_lut(
         Depending on the RTM and the size of the LUT the generation of a LUT
         might take a while!
 
-    :param sensor:
-        name of the sensor for which the simulated spectra should be resampled.
-        See `rtm_inv.core.sensors.Sensors` for a list of sensors currently
-        implemented.
     :param lut_params:
         lookup-table parameters with mininum and maximum range (always
         required), type of distribution (important to indicate which parameters
         are constant), mode and std (for Gaussian distributions).
     :param lut_size:
         number of items (spectra) to simulate in the LUT
-    :param rtm_name:
-        name of the RTM to call.
     :param sampling_method:
         sampling method for generating the input parameter space of the LUT.
         'LHS' (latin hypercube sampling) by default.
@@ -319,28 +305,10 @@ def generate_lut(
         relative azimuth angle (if available, optional) in deg C. If provided,
         the relative azimuth angle is not calculated from solar and observer
         azimuth angle and also not checked against them!
-    :param fpath_srf:
-        if provided uses actual spectral response functions (SRF) for spectral
-        resampling of RTM outputs (usually in 1nm steps) into the spectral
-        resolution of a given sensor.
-    :param remove_invalid_green_peaks:
-        remove simulated spectra with unrealistic green peaks (occuring at
-        wavelengths > 547nm) as suggested by Wocher et al.
-        (2020, https://doi.org/10.1016/j.jag.2020.102219).
-        NOTE: When this option is used, spectra not fulfilling the green
-        peak criterion  are set to NaN.
-    :param linearize_lai:
-        if True, transforms LAI values to a more linearized representation
-        as suggested by Verhoef et al. (2018,
-        https://doi.org/10.1016/j.rse.2017.08.006)
     :param fixed_angles:
         if True, then angles are the considered constant (e.g. when generating 
         LUT for a single scene). If False, the range and distirbution of the
         angles shuld be provided in te lut_params csv
-    :param rsoil0: soil spectra. 2101-element array with reflectance values between 400 and 2500nm. rsoil0 = rsoil * (psoil * soil_spectrum1 + (1.0 - psoil) * soil_spectrum2)
-    :param soil_spectrum1: dry soil spectra. (will be scaled by rsoil and psoil in lut params). 2101-element array with reflectance values between 400 and 2500nm
-        Should be provided with soil_spectrum2
-    :param soil_spectrum2: wet soil spectra. 2101-element array with reflectance values between 400 and 2500nm
     :param kwargs:
         optional keyword-arguments to pass to `LookupTable.generate_samples`
     :returns:
@@ -360,7 +328,51 @@ def generate_lut(
     lut.generate_samples(
         num_samples=lut_size, method=sampling_method, **kwargs)
 
-    # and run the RTM in forward mode in the second step
+    return lut
+
+
+def simulate_from_lut(
+    lut: LookupTable,
+    sensor: str,
+    rtm_name: Optional[str] = 'prosail',
+    fpath_srf: Optional[Path] = None,
+    remove_invalid_green_peaks: Optional[bool] = False,
+    linearize_lai: Optional[bool] = False,
+    rsoil0: Optional[np.array] = None,
+    soil_spectrum1: Optional[np.array] = None,
+    soil_spectrum2: Optional[np.array] = None,
+    ):
+
+    """
+    Simulate spectra using RTM and LUT
+
+    :param sensor:
+        name of the sensor for which the simulated spectra should be resampled.
+        See `rtm_inv.core.sensors.Sensors` for a list of sensors currently
+        implemented.
+    :param rtm_name:
+        name of the RTM to call.
+     :param fpath_srf:
+        if provided uses actual spectral response functions (SRF) for spectral
+        resampling of RTM outputs (usually in 1nm steps) into the spectral
+        resolution of a given sensor.
+    :param remove_invalid_green_peaks:
+        remove simulated spectra with unrealistic green peaks (occuring at
+        wavelengths > 547nm) as suggested by Wocher et al.
+        (2020, https://doi.org/10.1016/j.jag.2020.102219).
+        NOTE: When this option is used, spectra not fulfilling the green
+        peak criterion  are set to NaN.
+    :param linearize_lai:
+        if True, transforms LAI values to a more linearized representation
+        as suggested by Verhoef et al. (2018,
+        https://doi.org/10.1016/j.rse.2017.08.006)
+    :param rsoil0: soil spectra. 2101-element array with reflectance values between 400 and 2500nm. rsoil0 = rsoil * (psoil * soil_spectrum1 + (1.0 - psoil) * soil_spectrum2)
+    :param soil_spectrum1: dry soil spectra. (will be scaled by rsoil and psoil in lut params). 2101-element array with reflectance values between 400 and 2500nm
+        Should be provided with soil_spectrum2
+    :param soil_spectrum2: wet soil spectra. 2101-element array with reflectance values between 400 and 2500nm
+    """
+
+    # Run the RTM in forward mode in the second step
     # outputs get resampled to the spectral resolution of the sensor
     rtm = RTM(lut=lut, rtm=rtm_name)
     lut_simulations = rtm.simulate_spectra(
@@ -377,3 +389,4 @@ def generate_lut(
         lut_simulations['lai'] = transform_lai(
             lut_simulations['lai'], inverse=False)
     return lut_simulations
+
