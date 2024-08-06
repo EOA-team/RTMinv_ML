@@ -327,7 +327,8 @@ def train_model(config: dict) -> None:
       print('Final test', y_pred.min())
       if not isinstance(y_test, pd.Series):
           y_test = y_test.flatten()
-      model.test_scores(y_test=y_test, y_pred=y_pred.flatten(), dataset=f'Test {seed}', score_path=score_path)
+      if not np.isnan(y_pred.flatten()).any():
+        model.test_scores(y_test=y_test, y_pred=y_pred.flatten(), dataset=f'Test {seed}', score_path=score_path)
       
     #############################################
     # SAVE 

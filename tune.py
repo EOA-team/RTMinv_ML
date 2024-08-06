@@ -87,12 +87,12 @@ def extract_scores_from_output(output_lines, hyperparam_grid, hyperparam_values,
 
   for i, seed_line in enumerate(seed_lines):
     seed = int(seed_line.split('seed')[-1])
-    rmse = float([line for line in output_lines if 'RMSE' in line][i].split(': ')[1])
-    mae = float([line for line in output_lines if 'MAE' in line][i].split(': ')[1])
-    r2 = float([line for line in output_lines if 'R2' in line][i].split(': ')[1])
-    slope = float([line for line in output_lines if 'Regression slope' in line][i].split(': ')[1])
-    inter = float([line for line in output_lines if 'Regression intercept' in line][i].split(': ')[1])
-    rmselow = float([line for line in output_lines if 'rmselow' in line][i].split(': ')[1])
+    rmse = float([line for line in output_lines if 'RMSE' in line][i].split(': ')[1]) if len([line for line in output_lines if 'RMSE' in line]) else np.nan
+    mae = float([line for line in output_lines if 'MAE' in line][i].split(': ')[1]) if len([line for line in output_lines if 'MAE' in line]) else np.nan
+    r2 = float([line for line in output_lines if 'R2' in line][i].split(': ')[1]) if len([line for line in output_lines if 'R2' in line]) else np.nan
+    slope = float([line for line in output_lines if 'Regression slope' in line][i].split(': ')[1]) if len([line for line in output_lines if 'Regression slope' in line]) else np.nan
+    inter = float([line for line in output_lines if 'Regression intercept' in line][i].split(': ')[1]) if len([line for line in output_lines if 'Regression intercept' in line]) else np.nan
+    rmselow = float([line for line in output_lines if 'rmselow' in line][i].split(': ')[1]) if len([line for line in output_lines if 'rmselow' in line]) else np.nan
     
     seeds.append(seed)
     rmses.append(rmse)
@@ -136,7 +136,7 @@ def tune_model(config: dict) -> None:
   os.makedirs(results_dir, exist_ok=True)
 
   # Open a CSV file to store the results
-  results_file = os.path.join(results_dir, config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '_tuning.xlsx')
+  results_file = os.path.join(results_dir, config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d") + '_tuning_nosoil.xlsx')
   
   # Iterate over hyperparameter combinations
   for hyperparam_values in hyperparam_combinations:
@@ -190,7 +190,7 @@ def tune_model(config: dict) -> None:
     test_cmd = ['python', 'test.py', temp_config_path]
     process = run(test_cmd, stdout=PIPE, stderr=PIPE, universal_newlines=True)
 
-    score_df = extract_scores_from_output(process.stdoudt.split('\n'), hyperparam_grid, hyperparam_values, 'Val')
+    score_df = extract_scores_from_output(process.stdout.split('\n'), hyperparam_grid, hyperparam_values, 'Val')
 
     if results_file is not None:
       if os.path.exists(results_file):
