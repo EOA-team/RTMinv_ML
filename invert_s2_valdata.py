@@ -13,16 +13,13 @@ import warnings
 import sys
 import os
 from pathlib import Path
-base_dir = Path(os.path.dirname(os.path.realpath("__file__"))).parent
-sys.path.insert(0, os.path.join(base_dir, "eodal"))
-from eodal.config import get_settings
-from eodal.core.band import Band
-from eodal.core.raster import RasterCollection
-from pathlib import Path
 from typing import Dict, List, Optional
 from rtm_inv.core.inversion import inv_df, retrieve_traits
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+import matplotlib.pyplot as plt
 
-logger = get_settings().logger
+
+#logger = get_settings().logger
 warnings.filterwarnings('ignore')
 
 band_selection = [
@@ -102,20 +99,52 @@ def invert_scenes(
 
     return
 
+def compute_scores(data_path):
+    fname = data_path.split('.pkl')[0] + '_retrievednoise.pkl'
+    df = pd.read_pickle(fname)
+    df = df[~df['lai'].isna()]
+    rmse = mean_squared_error(df.lai, df.lai_retrieved, squared=False)
+    r2 = r2_score(df.lai, df.lai_retrieved)
+    print(f'LUT retrieval: RMSE {rmse}, R2: {r2}')
+    
+    plt.style.use('seaborn-v0_8-darkgrid')
+    ax = df.plot(kind='scatter', x='lai', y='lai_retrieved', figsize=(8,8), s=30)
+    ax.set_xlabel('Validation LAI', fontsize=16)
+    ax.set_ylabel('Predicted LAI', fontsize=16)
+    # Set axis limits
+    ax.set_xlim((0, 8))
+    ax.set_ylim((0, 8))
+    # Customize ticks
+    #ax.tick_params(axis='both', which='major', labelsize=16)
+    # Plot the y=x line
+    ax.plot([0, 8], [0, 8], color='gray', linestyle='--', label='1:1 fit')
+    # Plot the regression line
+    slope, intercept = np.polyfit(df.lai, df.lai_retrieved, 1)
+    xseq = np.linspace(0, 8, num=100)
+    ax.plot(xseq, intercept + slope * xseq, color="r", linestyle='--', label='Linear fit')
+    # Add legend
+    ax.legend(fontsize=16)
+    # Text for displaying on plot
+    textstr = f'RMSE: {rmse:.3f}\n$R^2$: {r2:.3f}'
+    # Add text box
+    props = dict(boxstyle='round', facecolor='white', alpha=0.5)
+    ax.text(0.03, 0.75, textstr, transform=ax.transAxes, fontsize=16, bbox=props)
+    # Save plot
+    plt.savefig('notebooks/manuscript_figures/lut_retreival_scatter_soilnoise.png')
 
+    return
 
 if __name__ == '__main__':
 
-    data_path = '../results/validation_data_extended_lai.pkl'
-    lut_dir = Path('../results/lut_based_inversion/soil_scaled')
-    lut_paths = [lut_dir.joinpath('prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints_inverse10.pkl')] #[lut_dir.joinpath('prosail_danner-etal_switzerland_S2A_lai-cab-ccc-car_lut_no-constraints.pkl'), lut_dir.joinpath('prosail_danner-etal_switzerland_S2B_lai-cab-ccc-car_lut_no-constraints.pkl'),]
-    
+    data_path = os.path.expanduser('~/mnt/eo-nas1/eoa-share/projects/010_CropCovEO/results/validation_data_extended_angles_shift.pkl')
+    lut_dir = os.path.expanduser('~/mnt/eo-nas1/eoa-share/projects/010_CropCovEO/results/lut_based_inversion/soil/')
+    lut_paths = [os.path.join(lut_dir, 'prosail_danner-etal_switzerland_soil_lai-cab-ccc-car_lut_no-constraints_multiplicative1.pkl')] #, os.path.join(lut_dir, 'prosail_danner-etal_switzerland_nosoil_S2B_lai-cab-ccc-car_lut_no-constraints.pkl')]
 
     cost_functions = 'mae'
     aggregation_methods ='median'
     n_solutions = 5000
     traits = ['lai']
-
+ 
     invert_scenes(
         data_path,
         lut_paths,
@@ -124,3 +153,5 @@ if __name__ == '__main__':
         aggregation_methods=aggregation_methods,
         traits=traits
     )
+
+    compute_scores(data_path)
