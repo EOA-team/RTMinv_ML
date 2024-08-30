@@ -292,7 +292,8 @@ def train_model(config: dict) -> None:
     """
 
     # Move data to CUDA if GPUs requested and available
-    device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if gpu and torch.cuda.is_available() else 'cpu')
+    print(device)
     if device == torch.device('cuda'):
       X_train, X_test, y_train, y_test = (
         torch.FloatTensor(X_train).to(device),
@@ -311,6 +312,7 @@ def train_model(config: dict) -> None:
     model = build_model(config=config)
     if device == torch.device('cuda'):
       model.to(device)
+
     #print(f"Model on: {next(model.parameters()).device}")
     #print(f"Data on: {X_test.device}")
 
