@@ -14,6 +14,10 @@ import yaml
 from typing import Dict, Tuple, Union, Any
 import pickle
 import torch
+import time
+from sklearn.metrics import mean_squared_error
+from scipy import stats
+import os
 
 from models import MODELS
 
@@ -245,6 +249,7 @@ def test_model(config: dict) -> None:
 
     # Move data to CUDA if GPUs requested and available
     device = torch.device('cuda' if config['Model'].get('gpu') and torch.cuda.is_available() else 'cpu')
+    print(device)
     if device == torch.device('cuda'):
         X_test, y_test = (
             torch.FloatTensor(X_test).to(device),
@@ -276,12 +281,53 @@ def test_model(config: dict) -> None:
       model.test_scores(y_test=y_test, y_pred=y_pred)
     else: 
       y_pred = model.predict(X_test=X_test)
-      model.test_scores(y_test=y_test.flatten(), y_pred=y_pred.flatten(), dataset=f'Val {seed}', score_path=score_path)
-      #y_pred = model.predict(X_test=X_train)
-      #model.test_scores(y_test=y_train, y_pred=y_pred, dataset='Train') 
+      if not np.isnan(y_pred.flatten()).any():
+        model.test_scores(y_test=y_test.flatten(), y_pred=y_pred.flatten(), dataset=f'Val {seed}', score_path=score_path)
+
+        # Compute r2 and nRMSE
+        compute_other_scores(y_test=y_test.flatten(), y_pred=y_pred.flatten(), dataset=f'Val {seed}', score_path=score_path)        
 
   return
 
+
+def compute_other_scores(y_test, y_pred, dataset, score_path):
+  """ 
+  Compute nromalised RMSE and pearson's r squared, and add to score_path
+  """
+
+  # Move y_pred to CPU if it's on CUDA device
+  if isinstance(y_pred, torch.Tensor) and y_pred.device.type == 'cuda':
+      y_pred = y_pred.cpu().detach().numpy()
+  if isinstance(y_test, torch.Tensor) and y_test.device.type == 'cuda':
+      y_test = y_test.cpu().detach().numpy()
+
+  nrmse = mean_squared_error(y_test, y_pred, squared=False)/(np.max(y_test) - np.min(y_test))
+  pearson = stats.pearsonr(y_test, y_pred).statistic
+
+  print(f'nRMSE: {nrmse}')
+  print(f'Pearson r2: {pearson**2}')
+  """
+  # Open excel file at score_path and append results
+  score_data = {
+      'Dataset': [dataset],
+      'nRMSE': [nrmse],
+      'r2': [pearson**2],
+  }
+  score_df = pd.DataFrame(score_data)
+  """
+  if score_path is not None:
+    if os.path.exists(score_path):
+        existing_df = pd.read_excel(score_path)
+        if 'nRMSE' not in existing_df.columns:
+            existing_df['nRMSE'] = [None]*len(existing_df)
+        existing_df.loc[existing_df['Dataset'] == dataset, 'nRMSE']= nrmse
+        if 'r2' not in existing_df.columns:
+            existing_df['r2'] = [None]*len(existing_df)
+        existing_df.loc[existing_df['Dataset'] == dataset, 'r2'] = pearson**2
+      
+        existing_df.to_excel(score_path, index=False)
+
+  return
 
     
 if __name__ == "__main__":

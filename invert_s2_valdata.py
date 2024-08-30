@@ -17,7 +17,8 @@ from typing import Dict, List, Optional
 from rtm_inv.core.inversion import inv_df, retrieve_traits
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
-
+import time
+from scipy import stats
 
 #logger = get_settings().logger
 warnings.filterwarnings('ignore')
@@ -105,12 +106,14 @@ def compute_scores(data_path):
     df = df[~df['lai'].isna()]
     rmse = mean_squared_error(df.lai, df.lai_retrieved, squared=False)
     r2 = r2_score(df.lai, df.lai_retrieved)
-    print(f'LUT retrieval: RMSE {rmse}, R2: {r2}')
+    nrmse = mean_squared_error(df.lai, df.lai_retrieved, squared=False)/(np.max(df.lai) - np.min(df.lai))
+    pearson = stats.pearsonr(df.lai, df.lai_retrieved).statistic
+    print(f'LUT retrieval: RMSE {rmse}, R2: {r2}, nRMSE: {nrmse}, r2: {pearson**2}')
     
     plt.style.use('seaborn-v0_8-darkgrid')
-    ax = df.plot(kind='scatter', x='lai', y='lai_retrieved', figsize=(8,8), s=30)
+    ax = df.plot(kind='scatter', x='lai', y='lai_retrieved', figsize=(8,8), s=50)
     ax.set_xlabel('Validation LAI', fontsize=16)
-    ax.set_ylabel('Predicted LAI', fontsize=16)
+    ax.set_ylabel('Retrieved LAI', fontsize=16)
     # Set axis limits
     ax.set_xlim((0, 8))
     ax.set_ylim((0, 8))
@@ -125,12 +128,12 @@ def compute_scores(data_path):
     # Add legend
     ax.legend(fontsize=16)
     # Text for displaying on plot
-    textstr = f'RMSE: {rmse:.3f}\n$R^2$: {r2:.3f}'
+    textstr = f'RMSE: {rmse:.3f}\nnRMSE: {nrmse:.3f}\n$R^2$: {pearson**2:.3f}'
     # Add text box
     props = dict(boxstyle='round', facecolor='white', alpha=0.5)
     ax.text(0.03, 0.75, textstr, transform=ax.transAxes, fontsize=16, bbox=props)
     # Save plot
-    plt.savefig('notebooks/manuscript_figures/lut_retreival_scatter_soilnoise.png')
+    plt.savefig('notebooks/manuscript_figures/lut_retreival_scatter_soilnoise_r2.png')
 
     return
 
@@ -144,7 +147,7 @@ if __name__ == '__main__':
     aggregation_methods ='median'
     n_solutions = 5000
     traits = ['lai']
- 
+    
     invert_scenes(
         data_path,
         lut_paths,

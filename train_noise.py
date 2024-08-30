@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 from sklearn.metrics import r2_score
+from scipy import stats
 
 def test_model(config: dict) -> None:
     ''' 
@@ -59,8 +60,10 @@ def test_model(config: dict) -> None:
     test_mae = mean_absolute_error(y_test, y_pred)
     slope, intercept = np.polyfit(y_test, y_pred, 1)
     rmse_low = mean_squared_error(y_test[y_test<3], y_pred[y_test<3], squared=False)
+    nrmse = mean_squared_error(y_test, y_pred, squared=False)/(np.max(y_test) - np.min(y_test))
+    pearson = stats.pearsonr(y_test, y_pred.flatten()).statistic
 
-    return model_name, test_rmse, test_mae, r2_score(y_test, y_pred), slope[0], intercept[0], rmse_low
+    return model_name, test_rmse, test_mae, r2_score(y_test, y_pred), slope[0], intercept[0], rmse_low, nrmse, pearson
 
 
 def test_model_lowLAI(config: dict) -> None:
@@ -113,8 +116,8 @@ def test_model_lowLAI(config: dict) -> None:
 
 if __name__ == "__main__":
 
-    config_path = 'configs/config_NN copy.yaml'
-    results_path = '../results/noise_results_NNsmall_nosoil.xlsx'
+    config_path = 'configs/config_NN.yaml'
+    results_path = '../results/noise_results_NNint_nosoil.xlsx'
 
     noise_levels = [1, 3, 5, 10, 15, 20]
     noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
@@ -153,7 +156,7 @@ if __name__ == "__main__":
         for seed in config_test['Seed']:
           print('Testing with seed', seed)
           config_test['Model']['save_path'] = model_basename.split('.pkl')[0] + f'{seed}.pkl'
-          model_name, test_rmse, test_mae, r2, slope, intercept, rmse_low = test_model(config_test)
+          model_name, test_rmse, test_mae, r2, slope, intercept, rmse_low, nrmse, pearson = test_model(config_test)
 
           score_data = {
               'Dataset': ['Test'],
@@ -165,7 +168,9 @@ if __name__ == "__main__":
               'R2': [r2],
               'Slope': [slope],
               'Intercept': [intercept],
-              'RMSelow': [rmse_low]
+              'RMSelow': [rmse_low],
+              'nRMSE': [nrmse],
+              'r2': [pearson]
           }
           score_df = pd.DataFrame(score_data)
 
@@ -185,7 +190,7 @@ if __name__ == "__main__":
         for seed in config_test['Seed']:
           print('Validating with seed', seed)
           config_test['Model']['save_path'] = model_basename.split('.pkl')[0] + f'{seed}.pkl'
-          model_name, test_rmse, test_mae, r2, slope, intercept, rmse_low = test_model(config_test)
+          model_name, test_rmse, test_mae, r2, slope, intercept, rmse_low, nrmse, pearson = test_model(config_test)
 
           score_data = {
               'Dataset': ['Val'],
@@ -197,7 +202,9 @@ if __name__ == "__main__":
               'R2': [r2],
               'Slope': [slope],
               'Intercept': [intercept],
-              'RMSelow': [rmse_low]
+              'RMSelow': [rmse_low],
+              'nRMSE': [nrmse],
+              'r2': [pearson]
           }
           score_df = pd.DataFrame(score_data)
 
@@ -216,7 +223,7 @@ if __name__ == "__main__":
     std_scores = updated_df.drop(['Seed'], axis=1).groupby(['Dataset', 'Type', 'Level']).std().reset_index()
 
     datasets = updated_df['Dataset'].unique()
-
+    """ 
     # Plot RMSE for val and test set
     fig, axes = plt.subplots(1, 2, figsize=(20, 6))
     for i, dataset in enumerate(datasets):
@@ -239,7 +246,7 @@ if __name__ == "__main__":
 
     plt.suptitle('RMSE of NN with nosoil and noise for different datasets')
     plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to make space for the main title
-    plt.savefig('../results/NNsmall_noise_nosoil_RMSE_datasets.png')  # Save plot as image
+    #plt.savefig('../results/NNint_noise_nosoil_RMSE_datasets.png')  # Save plot as image
 
 
     # Plot R2 for val and test set
@@ -252,8 +259,8 @@ if __name__ == "__main__":
         std_scores_dataset = std_scores[std_scores['Dataset'] == dataset]
         # Plot RMSE for each noise type
         for noise_type in noise_types:
-            mean_rmse = mean_scores_dataset[mean_scores_dataset['Type'] == noise_type]['R2']
-            std_rmse = std_scores_dataset[std_scores_dataset['Type'] == noise_type]['R2']
+            mean_rmse = mean_scores_dataset[mean_scores_dataset['Type'] == noise_type]['r2']
+            std_rmse = std_scores_dataset[std_scores_dataset['Type'] == noise_type]['r2']
             ax.errorbar(noise_levels, mean_rmse, yerr=std_rmse, label=noise_type, capsize=5)
         ax.set_xticks(noise_levels)
         ax.set_xlabel('Noise Level [%]')
@@ -264,5 +271,6 @@ if __name__ == "__main__":
 
     plt.suptitle('R2 of NN with nosoil and noise for different datasets')
     plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to make space for the main title
-    plt.savefig('../results/NNsmall_noise_nosoil_R2_datasets.png')  # Save plot as image
+    plt.savefig('../results/NNint_noise_nosoil_r2_datasets.png')  # Save plot as image
     plt.show()  # Display the plot
+    """
