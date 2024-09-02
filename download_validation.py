@@ -99,7 +99,7 @@ def extract_s2_data(
         time_end: datetime,
         scene_cloud_cover_threshold: float = 80,
         feature_cloud_cover_threshold: float = 50,
-        spatial_resolution: int = 10
+        spatial_resolution: int = 20
     ) -> SceneCollection:
     """
     Extracts Sentinel-2 data from the STAC SAT archive for a given area and time period.
@@ -216,12 +216,14 @@ def extract_s2_data(
     return mapper
 
 
-def find_nearest(point, tree, pixs):
+def find_nearest(point, tree, pixs, k=1):
     ''' 
     Find the nearest point in pixs for each point in gdf_date
     '''
-    _, index = tree.query((point.x, point.y))
-    return pixs.iloc[index]
+    
+    distances, indices = tree.query((point.x, point.y), k=k)
+    return pixs.iloc[indices]
+
 
 def compute_distance(row):
     return geodesic((row['geometry'].y, row['geometry'].x), (row['geometry_s2'].y, row['geometry_s2'].x)).meters
@@ -249,7 +251,7 @@ def load_data(data_path: str):
     """
 
     if data_path.endswith('.gpkg'):
-        gdf = gpd.read_file(data_path, crs='EPSG:2056').drop_duplicates()
+        gdf = gpd.read_file(data_path).to_crs(crs='EPSG:2056').drop_duplicates()
         cols = gdf.columns
         trait = 'lai' if 'lai' in cols else 'gcc'
         loc = 'location' if 'location' in cols else None
@@ -348,14 +350,23 @@ if __name__ == '__main__':
                         pixs_tree = cKDTree(pixs['geometry'].apply(lambda geom: (geom.x, geom.y)).tolist())
 
                         # Apply the function to each point in gdf_date
-                        nearest_points = gdf_date['geometry'].apply(lambda point: find_nearest(point, pixs_tree, pixs))
+                        points_coords = gdf_date['geometry'].apply(lambda geom: (geom.x, geom.y)).tolist()
+                        distances, indices = pixs_tree.query(points_coords, k=4)
+                        nearest_points = pixs.iloc[indices[0]]
+                        
+                        nearest_points = gdf_date['geometry'].apply(lambda point: find_nearest(point, pixs_tree, pixs, k=1))
                         nearest_points = nearest_points.rename(columns={'geometry': 'geometry_s2'})
                         gdf_date = pd.concat([gdf_date[['date', 'geometry'] +trait_cols +[loc_col]], nearest_points], axis=1)
+                        """
+                        gdf_date = pd.concat([gdf_date.reset_index(drop=True)] * len(nearest_points), ignore_index=True)
+                        nearest_points = nearest_points.rename(columns={'geometry': 'geometry_s2'})
+                        gdf_date = pd.concat([nearest_points.reset_index(drop=True), gdf_date], axis=1)
+                        """
 
                         # # Keep if less than 10m away to ensure its the right pixel
-                        gdf_date['distance'] = gdf_date.apply(compute_distance, axis=1)      
-                        gdf_date = gdf_date[gdf_date['distance'] <10]
-
+                        gdf_date['distance'] = gdf_date.apply(compute_distance, axis=1)
+                        gdf_date = gdf_date[gdf_date['distance'] < 20] #<10
+                        
                         # Add data on sun/sensor angles
                         gdf_date['view_zenith'] = s2_data.metadata['sensor_zenith_angle'].values[0]
                         gdf_date['sun_zenith'] = s2_data.metadata['sun_zenith_angle'].values[0]
@@ -391,7 +402,7 @@ if __name__ == '__main__':
                         """
 
   # Save in-situ val data
-  data_path = base_dir.joinpath(f'results/validation_data_extended_angles_shift.pkl')
+  data_path = base_dir.joinpath(f'results/validation_data_extended_angles_shift_2056.pkl')
   with open(data_path, 'wb+') as dst:
       pickle.dump(val_df, dst)
 
