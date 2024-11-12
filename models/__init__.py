@@ -5,7 +5,7 @@ from models.RidgeReg import RidgeReg
 from models.LassoReg import LassoReg
 from models.OLS import LinearReg
 from models.SVR import SVRReg
-from models.GPR import GaussianProcessActiveLearner
+#from models.GPR import GaussianProcessActiveLearner
 
 
 MODELS = {
@@ -16,5 +16,5 @@ MODELS = {
     "LassoReg": LassoReg,
     "OLS": LinearReg,
     "SVR": SVRReg,
-    "GPR": GaussianProcessActiveLearner
+    #"GPR": GaussianProcessActiveLearner
 }

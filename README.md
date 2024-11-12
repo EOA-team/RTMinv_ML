@@ -32,7 +32,23 @@ python download_validation.py
 
 ## 4. Train model
 
-To train the inversion model you need to configure the config files (`config/config_NN.yaml`)
+To train the inversion model you need to configure the config files (`config/config_NN.yaml`). You specify the model and its parameters, the train, test and validation sets.
+```
+python train.py configs/config_NN.yaml
+```
+
+Then test on the validation data with 
+```
+python test.py configs/config_NN.yaml
+```
+
+
 ## 5. Add noise
+
+Add noise to the LUT training data using different models and at different amounts
+```
+python noise.py
+```
+
 ## 6. Tune model
 ## 7. Results and predictions

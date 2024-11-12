@@ -240,7 +240,7 @@ class NeuralNetworkRegressor(nn.Module):
 
       return predictions
 
-  def test_scores(self, y_test: pd.Series, y_pred: np.array, dataset: str, score_path: str = None):
+  def test_scores(self, y_test: pd.Series, y_pred: np.array, dataset: str, score_path = None):
       '''
       Compute scores on the test set
 

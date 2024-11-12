@@ -6,7 +6,7 @@ Model:
     max_queries: 950
     strategy: 'ebd'
     save: True
-    save_path: 'trained_models/GPR_nosoil_test.pkl'
+    save_path: 'trained_models/GPR_soilscaled2_inverse30.pkl'
 
 
 Seed: 42

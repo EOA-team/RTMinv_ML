@@ -1,26 +1,25 @@
 Model: 
     name : "NN"
     input_size: 10
-    hidden_size: 16
+    hidden_size: 64
     hidden_layer: 2
     output_size: 1
     epochs: 100
-    batch_size: 16
+    batch_size: 8
     criterion: 'MSE'
     optim: 
         name: Adam
         lr: 0.001
     save: True
-    save_path: 'trained_models/NNint_soil.pkl'
+    save_path: 'trained_models/NNint_nosoil_mult1_tuned.pkl'
     score_path: 
     gpu : True
 
 Seed: [0,1,2,3,4]
 
 Data:
-    data_path : ['../results/lut_based_inversion/soil/prosail_danner-etal_switzerland_soil_lai-cab-ccc-car_lut_no-constraints_multiplicative1.pkl']
+    data_path : ['../results/lut_based_inversion/prosail_danner-etal_switzerland_nosoil_lai-cab-ccc-car_lut_no-constraints_multiplicative1.pkl']
     test_data_path : ['../results/lut_based_inversion/test/prosail_danner-etal_switzerland_nosoil_S2A_lai-cab-ccc-car_lut_no-constraints.pkl', '../results/lut_based_inversion/test/prosail_danner-etal_switzerland_nosoil_S2B_lai-cab-ccc-car_lut_no-constraints.pkl']
-    baresoil_samples : ['../results/GEE_baresoil_v2/sampled_pixels_31TGM.pkl', '../results/GEE_baresoil_v2/sampled_pixels_31TGN.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TLT.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TMT.pkl', '../results/GEE_baresoil_v2/sampled_pixels_32TNT.pkl']
     val_data_path : '../results/validation_data_extended_angles_shift.pkl'
     train_cols : ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B11', 'B12']
     target_col : 'lai'   
@@ -28,11 +27,11 @@ Data:
     normalize: True
 
 Grid:
-    lr: [0.001, 0.01, 0.1]
-    hidden_size : [16, 32, 64]
-    hidden_layer: [1,2]
-    batch_size: [8,16,32]
-    optim: ['Adam', 'SGD']
-    criterion: ['MSE', 'L1']
+    lr: [0.01] # #0.1
+    hidden_size : [32, 64] # 16, 
+    hidden_layer: [1,2] #   
+    batch_size: [8,16,32] # 
+    optim: ['Adam','SGD'] # 
+    criterion: ['MSE','L1'] #
 
 

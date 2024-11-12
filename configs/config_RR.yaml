@@ -1,10 +1,10 @@
 Model: 
     name : "RidgeReg"
-    alpha: 0.1
+    alpha: 1
     random_state: 42
     k_folds : 4
     save: True
-    save_path: 'trained_models/RR_nosoil_tuned.pkl'
+    save_path: 'trained_models/RR_nosoil_tuned_debug.pkl'
 
 Seed: 42
 
