@@ -402,7 +402,7 @@ if __name__ == '__main__':
                         """
 
   # Save in-situ val data
-  data_path = base_dir.joinpath(f'results/validation_data_extended_angles_shift_2056.pkl')
+  data_path = base_dir.joinpath(f'results/validation_data_extended_angles_shift.pkl')
   with open(data_path, 'wb+') as dst:
       pickle.dump(val_df, dst)
 
