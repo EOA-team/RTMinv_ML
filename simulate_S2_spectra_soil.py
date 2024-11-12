@@ -120,7 +120,7 @@ def generate_spectra_soil(
   # generate lookup-table
   trait_str = '-'.join(traits)
   fpath_lut = output_dir.joinpath(
-    f'{pheno_phases}_{trait_str}_lut_no-constraints.pkl') #
+    f'{pheno_phases}_{trait_str}_lut_constratints.pkl') #
 
   # if LUT exists, continue, else generate it
   if not fpath_lut.exists():
@@ -128,7 +128,8 @@ def generate_spectra_soil(
     lut_inp = lut_config.copy()
     lut_inp['lut_params'] = lut_params_pheno
     lut = generate_lut(**lut_inp)
-
+    print(lut._samples)
+    return
     # Simulate with RTM
     rtm_inp = rtm_config.copy()
     # Create LUT subgroups of size lut_size/len(soil_df). 
@@ -210,12 +211,12 @@ if __name__ == '__main__':
   os.chdir(cwd)
 
   # global setup
-  out_dir = Path('../results').joinpath('lut_based_inversion/test')
+  out_dir = Path('results').joinpath('lut_based_inversion/test/')
   out_dir.mkdir(exist_ok=True)
 
   # spectral response function of Sentinel-2 for resampling PROSAIL output
   fpath_srf = Path(
-      '../data/auxiliary/S2-SRF_COPE-GSEG-EOPG-TN-15-0007_3.1.xlsx')
+      'data/auxiliary/S2-SRF_COPE-GSEG-EOPG-TN-15-0007_3.1.xlsx')
   # Configurations for lookup-table generation and RTM simulations
   lut_config = {
       'lut_size': 10000,
@@ -233,7 +234,7 @@ if __name__ == '__main__':
   # directory with LUT parameters for different phenological macro-stages
   lut_params_dir = Path('lut_params')
   # Path to soil spectra to use
-  soil_path = Path('../results/GEE_baresoil_v2/sampled_spectra_all_CH.pkl')
+  soil_path = Path('results/GEE_baresoil_v2/sampled_spectra_all_CH.pkl')
 
   # target trait(s)
   traits = ['lai', 'cab', 'ccc', 'car']
