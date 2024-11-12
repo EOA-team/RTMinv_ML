@@ -112,8 +112,8 @@ def compute_scores(data_path):
     
     plt.style.use('seaborn-v0_8-darkgrid')
     ax = df.plot(kind='scatter', x='lai', y='lai_retrieved', figsize=(8,8), s=50)
-    ax.set_xlabel('Validation LAI', fontsize=16)
-    ax.set_ylabel('Retrieved LAI', fontsize=16)
+    ax.set_xlabel('Validation LAI [$m^{2}\ m^{-2}$]', fontsize=18)
+    ax.set_ylabel('Retrieved LAI [$m^{2}\ m^{-2}$]', fontsize=18)
     # Set axis limits
     ax.set_xlim((0, 8))
     ax.set_ylim((0, 8))
@@ -128,12 +128,23 @@ def compute_scores(data_path):
     # Add legend
     ax.legend(fontsize=16)
     # Text for displaying on plot
-    textstr = f'RMSE: {rmse:.3f}\nnRMSE: {nrmse:.3f}\n$R^2$: {pearson**2:.3f}'
+    #textstr = f'RMSE: {rmse:.3f}\nnRMSE: {nrmse:.3f}\n$R^2$: {pearson**2:.3f}'
+    textstr = (
+    r'RMSE: {:.3f} $m^{{2}} \, m^{{-2}}$' 
+    '\n' # Correct LaTeX for superscript
+    r'nRMSE: {:.3f}'
+    '\n'
+    r'$R^2$: {:.3f}'
+    ).format(
+        rmse,
+        nrmse,
+        pearson**2
+    )
     # Add text box
     props = dict(boxstyle='round', facecolor='white', alpha=0.5)
     ax.text(0.03, 0.75, textstr, transform=ax.transAxes, fontsize=16, bbox=props)
     # Save plot
-    plt.savefig('notebooks/manuscript_figures/lut_retreival_scatter_soilnoise_r2.png')
+    plt.savefig('results/lut_retreival_scatter_soil_r2.png')
 
     return
 
@@ -141,7 +152,7 @@ if __name__ == '__main__':
 
     data_path = os.path.expanduser('~/mnt/eo-nas1/eoa-share/projects/010_CropCovEO/results/validation_data_extended_angles_shift.pkl')
     lut_dir = os.path.expanduser('~/mnt/eo-nas1/eoa-share/projects/010_CropCovEO/results/lut_based_inversion/soil/')
-    lut_paths = [os.path.join(lut_dir, 'prosail_danner-etal_switzerland_soil_lai-cab-ccc-car_lut_no-constraints_multiplicative1.pkl')] #, os.path.join(lut_dir, 'prosail_danner-etal_switzerland_nosoil_S2B_lai-cab-ccc-car_lut_no-constraints.pkl')]
+    lut_paths = [os.path.join(lut_dir, 'prosail_danner-etal_switzerland_soil_S2A_lai-cab-ccc-car_lut_no-constraints.pkl'), os.path.join(lut_dir, 'prosail_danner-etal_switzerland_soil_S2B_lai-cab-ccc-car_lut_no-constraints.pkl')]
 
     cost_functions = 'mae'
     aggregation_methods ='median'

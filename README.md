@@ -58,7 +58,7 @@ python train_noise.py
 
 ## 6. Tune model
 
-Perform hyperparameter tuning. Grid of hyperparmeters is provided in the config file and save performance in excel file
+Perform hyperparameter tuning. Grid of hyperparmeters is provided in the config file and save performance in excel file (saved in `tuning_results/`)
 ```
 python tune.py configs/config_NN.yaml
 ```
@@ -67,4 +67,9 @@ Then compare hyperparameter tuning results with
 python compile_tuning_results.py
 ```
 
-## 7. Results and predictions
+## 7. Compare to other models
+
+Perform LUT-based inversion on the validation data, and get RMSE and $R^2$
+```
+python invert_s2_valdata.py
+```
