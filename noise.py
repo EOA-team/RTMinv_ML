@@ -108,16 +108,17 @@ def add_noise(df: pd.DataFrame, noise_level: int, noise_type: str) -> pd.DataFra
 
 if __name__ == '__main__':
 
+ 
   ######################
   # ADDING NOISE TO DATA (MULTIPLE NOISE MODELS AND LEVELS)
 
-  noise_levels = [1, 3, 5, 10, 15, 20, 25, 30, 40, 50]
+  noise_levels = [1, 3, 5, 10, 15, 20]
   noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined']
   cols = ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B8A', 'B10', 'B11', 'B12']
 
   # Load data
-  data_path = ['../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_S2A_lai-cab-ccc-car_lut_no-constraints.pkl', \
-    '../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_S2B_lai-cab-ccc-car_lut_no-constraints.pkl']
+  data_path = ['results/lut_based_inversion/prosail_danner-etal_switzerland_nosoil_S2A_lai-cab-ccc-car_lut_no-constraints.pkl', \
+                'results/lut_based_inversion/prosail_danner-etal_switzerland_nosoil_S2B_lai-cab-ccc-car_lut_no-constraints.pkl']
 
   if isinstance(data_path, str):
     df = pd.read_pickle(data_path)
@@ -134,7 +135,7 @@ if __name__ == '__main__':
       df_noisy = pd.concat([df[df.columns.difference(cols)], df_noisy], axis=1)
 
       # Save noisy data
-      with open(f'../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints_{noise_type}{noise_level}_v2.pkl', 'wb') as f:
+      with open(f'results/lut_based_inversion/prosail_danner-etal_switzerland_nosoil_lai-cab-ccc-car_lut_no-constraints_{noise_type}{noise_level}.pkl', 'wb') as f:
         pickle.dump(df_noisy, f)
 
   """
@@ -143,11 +144,11 @@ if __name__ == '__main__':
   # ADDING SPECIFIC NOISE MODELS
 
   # Noise to add in LAI<=3 spectra
-  noise_lvl_low = 0
+  noise_lvl_low = 10
   noise_type_low = 'multiplicative'
 
   # Noise to add in LAI>3 spectra
-  noise_lvl_high = 10
+  noise_lvl_high = 1
   noise_type_high = 'inverse'
 
 
@@ -185,5 +186,4 @@ if __name__ == '__main__':
   # Save noisy data
   with open(f'../results/lut_based_inversion/soil_scaled/prosail_danner-etal_switzerland_lai-cab-ccc-car_lut_no-constraints_mixed.pkl', 'wb') as f:
     pickle.dump(df_noisy, f)
-  """ 
-
+ """ 

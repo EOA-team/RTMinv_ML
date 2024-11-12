@@ -43,12 +43,13 @@ python test.py configs/config_NN.yaml
 ```
 
 
-## 5. Add noise
+## 5. Add noise to training data
 
 Add noise to the LUT training data using different models and at different amounts
 ```
 python noise.py
 ```
+and save to `results/lut_based_inversion`
 
 ## 6. Tune model
 ## 7. Results and predictions
