@@ -51,5 +51,20 @@ python noise.py
 ```
 and save to `results/lut_based_inversion`
 
+Train the model with different noise types and levels, and compare results saved in an excel file
+```
+python train_noise.py
+```
+
 ## 6. Tune model
+
+Perform hyperparameter tuning. Grid of hyperparmeters is provided in the config file and save performance in excel file
+```
+python tune.py configs/config_NN.yaml
+```
+Then compare hyperparameter tuning results with 
+```
+python compile_tuning_results.py
+```
+
 ## 7. Results and predictions

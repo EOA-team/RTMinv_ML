@@ -18,7 +18,7 @@ import csv
 from subprocess import run, PIPE
 import itertools
 import pandas as pd
-
+import numpy as np
 
 def load_config(config_path: str) -> Dict:
   ''' 
@@ -85,15 +85,21 @@ def extract_scores_from_output(output_lines, hyperparam_grid, hyperparam_values,
   ints = []
   rmselows = []
 
+  idx = 0
   for i, seed_line in enumerate(seed_lines):
     seed = int(seed_line.split('seed')[-1])
-    rmse = float([line for line in output_lines if 'RMSE' in line][i].split(': ')[1]) if len([line for line in output_lines if 'RMSE' in line]) else np.nan
-    mae = float([line for line in output_lines if 'MAE' in line][i].split(': ')[1]) if len([line for line in output_lines if 'MAE' in line]) else np.nan
-    r2 = float([line for line in output_lines if 'R2' in line][i].split(': ')[1]) if len([line for line in output_lines if 'R2' in line]) else np.nan
-    slope = float([line for line in output_lines if 'Regression slope' in line][i].split(': ')[1]) if len([line for line in output_lines if 'Regression slope' in line]) else np.nan
-    inter = float([line for line in output_lines if 'Regression intercept' in line][i].split(': ')[1]) if len([line for line in output_lines if 'Regression intercept' in line]) else np.nan
-    rmselow = float([line for line in output_lines if 'rmselow' in line][i].split(': ')[1]) if len([line for line in output_lines if 'rmselow' in line]) else np.nan
-    
+    rmse = float([line for line in output_lines if f'{i} RMSE' in line][0].split(': ')[1]) if len([line for line in output_lines if f'{i} RMSE' in line]) else np.nan
+    mae = float([line for line in output_lines if f'{i} MAE' in line][0].split(': ')[1]) if len([line for line in output_lines if f'{i} MAE' in line]) else np.nan
+    r2 = float([line for line in output_lines if f'{i} R2' in line][0].split(': ')[1]) if len([line for line in output_lines if f'{i} R2' in line]) else np.nan
+    rmselow = float([line for line in output_lines if f'{i} rmselow' in line][0].split(': ')[1]) if len([line for line in output_lines if f'{i} rmselow' in line]) else np.nan
+    if np.isnan(rmse):
+      slope = np.nan
+      inter = np.nan
+    else:
+      slope = float([line for line in output_lines if 'Regression slope' in line][idx].split(': ')[1])
+      inter = float([line for line in output_lines if 'Regression intercept' in line][idx].split(': ')[1])
+      idx += 1
+
     seeds.append(seed)
     rmses.append(rmse)
     maes.append(mae)
@@ -136,7 +142,7 @@ def tune_model(config: dict) -> None:
   os.makedirs(results_dir, exist_ok=True)
 
   # Open a CSV file to store the results
-  results_file = os.path.join(results_dir, config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d") + '_tuning_nosoil.xlsx')
+  results_file = os.path.join(results_dir, config['Model']['name'] + '_' + datetime.now().strftime("%Y%m%d") + '_tuning_soil.xlsx')
   
   # Iterate over hyperparameter combinations
   for hyperparam_values in hyperparam_combinations:
@@ -150,7 +156,7 @@ def tune_model(config: dict) -> None:
     config['Model']['score_path'] = None
 
     # Save the updated config to a temporary file
-    temp_config_path = os.path.join(results_dir, 'temp_config_nosoil.yaml')
+    temp_config_path = os.path.join(results_dir, 'temp_config_soil.yaml')
     temp_config_path = save_updated_config(config, temp_config_path)
 
     ###########
