@@ -283,7 +283,7 @@ if __name__ == '__main__':
         print(f'Sampling bare soil from tile {tile_id}...')
         
         # Load all tif files for that tile
-        tile_BS_paths = glob.glob(str(base_dir.joinpath(f'data/S2_baresoil_GEE/*{tile_id}*.tif')))
+        tile_BS_paths = glob.glob(str(base_dir.joinpath(f'data/*{tile_id}*.tif')))
 
         # Put in a geodataframe
         gdfs_tile = [load_raster_gdf(f) for f in tile_BS_paths]

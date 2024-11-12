@@ -1,0 +1,461 @@
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Sentine-2-processing
+/// 1. Cloud-masking
+
+/// 3. Additional processing of collection:
+//// -> percentile-masking
+//// -> add timeStamp-bands
+//// -> add spectral index-bands
+//// -> select/order bands
+
+/// 4. Frequency composite images
+//// -> total pixel-frequency (freqTotal)
+//// -> baresoil pixel-frequency (freqBS)
+//// -> vegetation pixel-frequency (freqVeg)
+
+/// 5. Reflectance composite images
+//// -> mean of annual GreenestPixel (bands:B2-B8,B8A,B9-B12,ndvi,nbr2)
+//// -> mean of annual LeastGreenestPixel (bands:B2-B8,B8A,B9-B12,ndvi,nbr2)
+//// -> mean of annual Median (bands:B2-B8,B8A,B9-B12,ndvi,nbr2)
+
+/// 6. Soil reflectance composite images
+//// -> mean of annual barest pixel ((bands:B2-B8,B8A,B9-B12,ndvi,nbr2))
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+//==========================================================================================================================================================================================//
+//==========================================================================================================================================================================================//
+// Set Globals
+////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////
+
+
+// Globals: Location and Period for S2-collection
+//--------------------------------------------------------//
+var aoi = table; // add any point or polygon geometry by clicking into the map
+var aoi_forClip = table;// add any point or polygon geometry by clicking into the map
+
+// Loop through years
+for (var year = 2017; year <= 2023; year++) {
+  // Update startYear and endYear
+  var startYear = ee.Number(year);
+  var endYear = ee.Number(year);
+
+  // Update startDate and endDate
+  var startDate = ee.String(ee.Number(year).format('%d')).cat('-01-01');
+  var endDate = ee.String(ee.Number(year).format('%d')).cat('-12-31');
+  
+  var startMonth= ee.Number(1);
+  var endMonth= ee.Number(12);
+  
+  /*
+  var startDate = '2017-01-01';
+  var endDate = '2017-12-31';
+  
+  var startMonth= ee.Number(1);
+  var endMonth= ee.Number(12);
+  
+  var startYear = ee.Number(2017)
+  var endYear = ee.Number(2017)
+  */
+
+
+  // Globals: Cloud and cloud shadow detection (s2cloudless-parameter)
+  //--------------------------------------------------------//
+  var cloudFilter = 50; // maximum allowed cloud cover per image in %
+  var cloudProbThr = 10; // Cloud probability threshold per pixel in %; greater values are considered as cloud
+  var nirDarknessThr = 0.15; // cloud shadow threshold based on nir-reflectance; lesser values are considered as cloud shadow
+  var cloudProjDist = 2; // maximum distance to search for cloud shadows from cloud edge in pixels
+  var cloudBuffer = 50; // distance (m) to extent the edge of cloud objects
+  
+  
+  
+  // Globals: Visualization
+  //--------------------------------------------------------//
+  var visualization = {
+    min: 0.0,
+    max: 3000,
+    bands: ['B4', 'B3', 'B2'],
+  };
+  
+  
+  
+  // Get SRTM-dem (30m x 30m)
+  //--------------------------------------------------------//
+  var dem = ee.Image("USGS/SRTMGL1_003"); // needed for topographic correction
+  //==========================================================================================================================================================================================//
+  //==========================================================================================================================================================================================//
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  //==========================================================================================================================================================================================//
+  //==========================================================================================================================================================================================//
+  // Cloud-masked Sentinel-2-collection
+  ////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
+  
+  
+  // Function: Get S2_SR collection with s2cloudless-info, filtered by aoi,period, relevant bands and a cloudPrefilter
+  //--------------------------------------------------------//
+  var FUN_s2_collectionPrefiltered = function(aoi, startDate,endDate,startMonth,endMonth) {
+    var s2_sr = ee.ImageCollection('COPERNICUS/S2_SR')
+                    .filterDate(startDate, endDate)
+                    .filter(ee.Filter.calendarRange(startMonth,endMonth,'month')) 
+                    .filter(ee.Filter.bounds(aoi))
+                    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',cloudFilter)) // => prefilter derived from raw metadata
+                    .sort('system:time_start',true) // if false collection is sorted descending
+                    .select(['B1','B2', 'B3','B4', 'B5', 'B6', 'B7', 'B8', 'B8A', 'B9', 'B11', 'B12',
+                              'SCL']);
+                              
+    var s2_cloudProb = ee.ImageCollection('COPERNICUS/S2_CLOUD_PROBABILITY')
+                    .filterDate(startDate, endDate)
+                    .filter(ee.Filter.calendarRange(startMonth,endMonth,'month')) 
+                    .filter(ee.Filter.bounds(aoi))
+                    .sort('system:time_start',true) // if false collection is sorted descending
+                    .select(['probability']);
+    
+    var filter_sysIndex = ee.Filter.equals({'leftField':'system:index',
+                                          'rightField': 'system:index'
+                                          });
+  
+    return ee.ImageCollection(ee.Join.saveFirst('s2cloudless').apply({'primary':s2_sr,
+                                                     'secondary':s2_cloudProb,
+                                                     'condition':filter_sysIndex,
+                                                      }))};
+  
+  
+  
+  
+  
+  // Function: Add bands -> add 2cloudless-prob and cloud mask to S2_SR image
+  //--------------------------------------------------------//
+  var FUN_addCloudBands = function(img){
+    var cloudProb = ee.Image(img.get('s2cloudless')).select('probability'); // get s2cloudless-probability band as image
+    var isCloud = cloudProb.gt(cloudProbThr).rename('clouds'); // get mask according to probability threshold
+    return img.addBands(ee.Image([cloudProb,isCloud]))}; // add s2cloudless-probability and probability mask as image-bands
+  
+  
+  
+  
+  
+  // Function: Add bands -> add masks for dark pixels, cloud projection and shadows to S2_SR image
+  //--------------------------------------------------------//
+  var FUN_addShadowBands = function(img){
+    
+    var not_water = img.select('SCL').neq(6) // get water, snow, cloud mask from the SCL-band
+                    .and(img.select('SCL').neq(3))
+                    .and(img.select('SCL').neq(8))
+                    .and(img.select('SCL').neq(9))
+                    .and(img.select('SCL').neq(10))
+                    .and(img.select('SCL').neq(11));
+    
+    var SR_BAND_SCALE = 1e4; // rescale B8-band to get dark pixel mask from based on dark pixel-threshold
+    var dark_pixels = img.select('B8').lt(nirDarknessThr*SR_BAND_SCALE).multiply(not_water).rename('dark_pixels');
+    
+    var shadow_azimuth = ee.Number(90).subtract(ee.Number(img.get('MEAN_SOLAR_AZIMUTH_ANGLE'))); // determine the direction of shadows from clouds (assumes UTM projection)
+    
+    var cld_proj = (img.select('clouds').directionalDistanceTransform(shadow_azimuth, cloudProjDist*10) // extent shadows from clouds based on cloudProjDist-threshold
+        .reproject({'crs': img.select(0).projection(), 'scale': 100})
+        .select('distance')
+        .mask()
+        .rename('cloud_transform'));
+        
+    var shadows = cld_proj.multiply(dark_pixels).rename('shadows'); // get mask of combined darkpixel-band and shadow-band
+    
+    return img.addBands(ee.Image([dark_pixels, cld_proj, shadows]))}; //add masks for darkpixels,shadow extent and shadows as image-bands
+  
+  
+  
+  
+  
+  // Function: Add band -> Assemble cloud and shadow components and add final cloud-shadow-mask to to S2_SR image
+  //--------------------------------------------------------//
+  var FUN_addCloudShadowMask = function(img){
+    var img_cloud = FUN_addCloudBands(img); // add previously processed cloud bands
+    
+    var img_cloud_shadow = FUN_addShadowBands(img_cloud); // add previously processed shadow bands
+    
+    var is_cld_shdw1 = img_cloud_shadow.select('clouds').add(img_cloud_shadow.select('shadows')).gt(0); // combine cloud and shadow mask; cloud and shadow = 1, else 0
+    
+    var is_cld_shdw = (is_cld_shdw1.focal_min(2).focal_max(cloudBuffer*2/20) // remove small cloud shadow patches and extent remaining pixels by cloudBuffer-threshold
+          .reproject({'crs': img.select([0]).projection(), 'scale': 20}) // 20m-scale assumes adequate precision and causes accelerated processing
+          .rename('cloudmask'));
+          
+    return img.addBands(is_cld_shdw)}; // add cloud-shadow-mask as band to the original S2-bands; if you want to keep all processed bands, replace with "return img_cloud_shadow.addBands(is_cld_shdw)"
+  
+  
+  
+  
+  
+  // Function: apply the cloudmask to each image in a s2-collection
+  //--------------------------------------------------------//
+  var FUN_applyCloudShadowMask = function (img){
+    var not_cld_shdw = img.select('cloudmask').not(); // get cloudmask-band and invert: cloud/shadow=0, else 1
+    return img.select('B.*').updateMask(not_cld_shdw)}; // get reflectenace bands masked by cloudShadowMask
+  
+  
+  
+  
+  
+  // Get s2-collection filtered by space-time and atmospherically corrected
+  //--------------------------------------------------------//
+  var S2_coll = FUN_s2_collectionPrefiltered(aoi, startDate,endDate,startMonth,endMonth);
+  
+  var S2_coll_AtmoCorrected = S2_coll.map(FUN_addCloudShadowMask)
+                                     .map(FUN_applyCloudShadowMask);
+                                     
+  // Function to mask out snowy pixels
+  var FUN_maskSnow = function(image) {
+    // Use appropriate bands for snow detection based on your specific requirements
+    var snowMask = image.select('B4').lt(1000); // Modify this condition based on your data
+  
+    // Update the mask property of the image
+    return image.updateMask(snowMask);
+  };
+
+  // Apply snow masking function to the collection
+  var S2_coll_SnowMasked = S2_coll_AtmoCorrected.map(FUN_maskSnow);
+                                   
+    
+  var S2 = S2_coll_SnowMasked; // rename for further processing
+  //==========================================================================================================================================================================================//
+  //==========================================================================================================================================================================================//
+  
+  
+  
+  
+  
+  //==========================================================================================================================================================================================//
+  //==========================================================================================================================================================================================//
+  // Additional processing of collection
+  ////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
+  
+  
+  // Mask pixels if one band greater and below  absolute threshold values
+  //--------------------------------------------------------//
+  var thr_top = 10000;
+  
+  var S2 = S2.map(function(image) {
+    var maskTop = image.lt(thr_top);
+    return image.updateMask(maskTop);
+  });
+  
+  
+  var thr_bottom = 1;
+  
+  var S2 = S2.map(function(image) {
+    var maskBottom = image.gt(thr_bottom);
+    return image.updateMask(maskBottom);
+  });
+  
+  
+  // Mask pixels by bandwise top- and bottom-percentiles as threshold
+  //--------------------------------------------------------//
+  /// Mask by top-percentile threshold 
+  var thr_percentileTop = 99;
+  
+  var mask_percentileTHR_top = S2.reduce(ee.Reducer.percentile([thr_percentileTop]));
+  
+  var S2 = S2.map(function(image) {
+    return image.updateMask(image.lt(mask_percentileTHR_top));
+  });
+  
+  
+  /// Mask by bottom-percentile threshold 
+  var thr_percentileBottom = 1;
+  
+  var mask_percentileTHR_bottom = S2.reduce(ee.Reducer.percentile([thr_percentileBottom]));
+  
+  var S2 = S2.map(function(image) {
+    return image.updateMask(image.gt(mask_percentileTHR_bottom));
+  });
+  
+  
+  
+  
+  
+  // Add timestamp-band 'day of the year' (doy) to the collection
+  //--------------------------------------------------------//
+  var FUN_addDOY = function(image){
+    var doy = image.date().getRelative('day', 'year');
+    var doyBand = ee.Image.constant(doy).uint16().rename('doy');
+    return image.addBands(doyBand);
+  };
+  
+  var S2 = S2.map(FUN_addDOY);
+  
+  
+  
+  
+  
+  // Add timestamp-band 'year' to the collection
+  //--------------------------------------------------------//
+  var FUN_addYear = function(image){
+  var year = ee.Date(image.get('system:time_start')).format('y');
+  var num = ee.Number.parse(year);
+  var banddate = image.select('B1').multiply(0).eq(0).multiply(num).toUint16().rename('year');
+  return image.addBands(banddate);
+  };
+  
+  var S2 = S2.map(FUN_addYear);
+  
+  
+  
+  
+  
+  // Add spectral indices to the collection
+  //--------------------------------------------------------//
+  var FUN_addIndices = function(image) {
+  
+   var ndvi = image.expression('(nir - red) / (nir + red)', 
+                              {'red': image.select('B4'), 'nir': image.select('B8')})
+                              .rename('ndvi').float(); // NDVI: Normalized Difference Vegetation Index (Rouse et al., 1974)
+   var ndviNeg = image.expression('((nir - red) / (nir + red))*(-1)', 
+                              {'red': image.select('B4'), 'nir': image.select('B8')})
+                              .rename('ndviNeg').float(); // negated NDVI for later use with "qualityMosaic" and "LeastGreenestPixel"
+   var nbr2 = image.expression('(swirS - swirL) / (swirS + swirL)', 
+                              {'swirS': image.select('B11'), 'swirL': image.select('B12')})
+                              .rename('nbr2').float(); // NBR2: Normalized Burned Ratio (Garcia and Caselles, 1991)
+   var constant = ee.Image.constant(1).rename('constant'); // add a constant band = 1
+   return image.addBands([ndvi,ndviNeg,nbr2,constant]);
+  };
+  
+  var S2 = S2.map(FUN_addIndices);
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  //==========================================================================================================================================================================================//
+  //==========================================================================================================================================================================================//
+  // Frequency composite images
+  ////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
+  
+  
+  // Get baresoil pixel-frequency image 
+  /// band: freqBS
+  //--------------------------------------------------------//
+  var FUN_BSfilter = function(image) {
+    var ndvi = image.select('ndvi');
+    var nbr2 = image.select('nbr2');
+    var BSmask = ndvi.gte(0).and(ndvi.lte(0.25)).and(nbr2.lte(0.075)); // ndvi 0-0.25 => baresoil; nbr2 > 0.075 => straw. Also mask out snow
+    return image.updateMask(BSmask);
+  };
+  
+  var img_freqBS = S2.map(FUN_BSfilter)
+                 .select('B1') // take any band
+                 .count()
+                 .rename('freqBS');
+                 
+                 
+  // Function: Extract date from image
+  var FUN_getDate = function(image) {
+    return image.date().format('YYYY-MM-dd');
+  };
+  
+  
+  
+  
+  //==========================================================================================================================================================================================//
+  //==========================================================================================================================================================================================//
+  // Soil reflectance composite images
+  ////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
+  
+  
+  // Mean of annual barest pixel image
+  /// -> bands:B2-B8,B8A,B9-B12,ndvi,nbr2
+  //--------------------------------------------------------//
+  
+  /// Get S2-collection with only baresoil-pixels
+  var FUN_BSfilter = function(image) {
+    var ndvi = image.select('ndvi');
+    var nbr2 = image.select('nbr2');
+    var BSmask = ndvi.gte(0).and(ndvi.lte(0.25)).and(nbr2.lte(0.075)); // ndvi 0-0.25 => baresoil; nbr2 > 0.075 => straw
+    return image.updateMask(BSmask);
+  };
+  
+  var S2_BS = S2.select(['B1', 'B2', 'B3','B4', 'B5', 'B6', 'B7', 'B8', 'B8A', 'B9', 'B11', 'B12','ndvi','nbr2','ndviNeg','doy','year'])
+                .map(FUN_BSfilter);
+                
+  print('S2_BS',S2_BS);
+  
+  
+  /// Mean of annual barest pixel
+  var years = ee.List.sequence(startYear, endYear); 
+  
+  var S2_annualBS = ee.ImageCollection.fromImages(
+        years.map(function (m) {
+          return S2_BS.filter(ee.Filter.calendarRange(m, m, 'year'))
+                      .select(['B1', 'B2', 'B3','B4', 'B5', 'B6', 'B7', 'B8', 'B8A', 'B9', 'B11', 'B12','ndvi','nbr2','ndviNeg'])
+                      .qualityMosaic('ndviNeg');
+  }));
+  
+  
+  
+  var img_MeanBS = S2_annualBS.select(['B1', 'B2', 'B3','B4', 'B5', 'B6', 'B7', 'B8', 'B8A', 'B9', 'B11', 'B12','ndvi','nbr2'])
+                                                    .reduce(ee.Reducer.mean())
+                                                    .rename(['B1_MeanBS','B2_MeanBS','B3_MeanBS',
+                                                             'B4_MeanBS', 'B5_MeanBS',
+                                                             'B6_MeanBS', 'B7_MeanBS',
+                                                             'B8_MeanBS','B8A_MeanBS',
+                                                             'B9_MeanBS','B11_MeanBS',
+                                                             'B12_MeanBS','ndvi_MeanBS',
+                                                             'nbr2_MeanBS']);
+  
+  
+  Map.centerObject(aoi, 15);
+  Map.addLayer(img_MeanBS.clip(aoi_forClip), {min:1,max:3000,bands: ['B4_MeanBS', 'B3_MeanBS', 'B2_MeanBS']}, 'img_MeanBS_RGB');
+  
+  //==========================================================================================================================================================================================//
+  //==========================================================================================================================================================================================//
+  
+  
+  
+  
+  
+  
+  //==========================================================================================================================================================================================//
+  //==========================================================================================================================================================================================//
+  // Export Sentinel composite images - as example
+  ////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
+  
+  
+  
+  //  Soil Reflectance Composite (SRC): Mean of annual barest pixel across 2017-2020
+  /// -> bands:'B2_MeanBS','B3_MeanBS','B4_MeanBS', 'B5_MeanBS','B6_MeanBS', 'B7_MeanBS',
+  /// ->       'B8_MeanBS','B8A_MeanBS','B9_MeanBS','B11_MeanBS','B12_MeanBS','ndvi_MeanBS',
+  /// ->       'nbr2_MeanBS'
+  //--------------------------------------------------------//
+  
+  // Export Sentinel composite images for each year
+  Export.image.toDrive({
+    image: img_MeanBS.clip(aoi_forClip).toFloat(),
+    region: aoi,
+    description: 'S2_BS_' + year + '_32TGM_p3',
+    scale: 10,
+    crs: 'EPSG:2056',
+    maxPixels: 90000000,
+    folder: 'S2_baresoil_GEE',
+    fileFormat: 'GeoTIFF'
+  });
+}
