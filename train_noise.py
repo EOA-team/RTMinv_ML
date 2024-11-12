@@ -117,7 +117,7 @@ def test_model_lowLAI(config: dict) -> None:
 if __name__ == "__main__":
 
     config_path = 'configs/config_NN.yaml'
-    results_path = '../results/noise_results_NNint_nosoil.xlsx'
+    results_path = 'results/noise_results_NNint_nosoil.xlsx'
 
     noise_levels = [1, 3, 5, 10, 15, 20]
     noise_types = ['additive', 'multiplicative', 'combined', 'inverse', 'inverse_combined'] 
